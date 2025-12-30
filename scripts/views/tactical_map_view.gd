@@ -38,12 +38,13 @@ const MAX_ZOOM: float = 5.0
 
 
 func _ready() -> void:
-	# Get simulation state reference from parent
-	var main_node = get_parent()
-	if main_node:
-		simulation_state = main_node.get_node_or_null("SimulationState")
-		if not simulation_state:
-			push_error("TacticalMapView: SimulationState not found")
+	# Get simulation state reference from parent if not already set
+	if not simulation_state:
+		var main_node = get_parent()
+		if main_node:
+			simulation_state = main_node.get_node_or_null("SimulationState")
+			if not simulation_state:
+				push_error("TacticalMapView: SimulationState not found")
 	
 	# Create UI elements
 	_create_ui_elements()
@@ -277,6 +278,9 @@ func _process(_delta: float) -> void:
 
 ## Update submarine icon position and info display
 func _update_submarine_display() -> void:
+	if not simulation_state:
+		return
+	
 	# Update submarine info label
 	submarine_info_label.text = "Position: (%.0f, %.0f, %.0f)\n" % [
 		simulation_state.submarine_position.x,
