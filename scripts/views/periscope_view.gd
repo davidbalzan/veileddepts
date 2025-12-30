@@ -12,6 +12,9 @@ var camera: Camera3D
 ## Reference to simulation state for submarine position
 var simulation_state: SimulationState
 
+## Reference to ocean renderer for wave height queries
+var ocean_renderer: OceanRenderer
+
 ## Lens effect shader material
 var lens_shader_material: ShaderMaterial
 
@@ -20,7 +23,8 @@ var lens_effect_rect: ColorRect
 
 ## Periscope control parameters
 var zoom_level: float = 60.0  # Field of view in degrees (15° to 90°)
-var periscope_rotation: float = 0.0  # Rotation in degrees (0-360)
+var periscope_rotation: float = 0.0  # Horizontal rotation in degrees (0-360)
+var periscope_pitch: float = 0.0  # Vertical pitch in degrees (-90 to +90)
 
 ## Zoom limits (FOV in degrees)
 const MIN_FOV: float = 15.0  # Telephoto
@@ -58,6 +62,11 @@ func _ready() -> void:
 	if not simulation_state:
 		push_error("PeriscopeView: SimulationState not found")
 	
+	# Find ocean renderer in this view
+	ocean_renderer = get_node_or_null("OceanRenderer")
+	if not ocean_renderer:
+		push_warning("PeriscopeView: OceanRenderer not found, underwater detection will use fixed depth")
+	
 	# Initialize camera FOV
 	camera.fov = zoom_level
 	
@@ -82,10 +91,13 @@ func update_camera_position() -> void:
 	
 	camera.global_position = mast_position
 	
-	# Apply rotation based on periscope rotation control
+	# Apply rotation based on periscope rotation and pitch
 	# Rotation is in degrees where 0 is north (+Z), 90 is east (+X)
 	var rotation_rad = deg_to_rad(periscope_rotation)
+	var pitch_rad = deg_to_rad(periscope_pitch)
+	
 	camera.rotation.y = rotation_rad
+	camera.rotation.x = pitch_rad
 
 
 ## Handle rotation input for periscope rotation
@@ -104,7 +116,26 @@ func handle_rotation_input(delta_rotation: float) -> void:
 	# Apply rotation to camera
 	if camera:
 		var rotation_rad = deg_to_rad(periscope_rotation)
+		var pitch_rad = deg_to_rad(periscope_pitch)
 		camera.rotation.y = rotation_rad
+		camera.rotation.x = pitch_rad
+
+
+## Handle pitch input for vertical camera movement
+## @param delta_pitch: Change in pitch in degrees
+func handle_pitch_input(delta_pitch: float) -> void:
+	# Update pitch
+	periscope_pitch += delta_pitch
+	
+	# Clamp to -90 to +90 range
+	periscope_pitch = clamp(periscope_pitch, -90.0, 90.0)
+	
+	# Apply pitch to camera
+	if camera:
+		var rotation_rad = deg_to_rad(periscope_rotation)
+		var pitch_rad = deg_to_rad(periscope_pitch)
+		camera.rotation.y = rotation_rad
+		camera.rotation.x = pitch_rad
 
 
 ## Handle zoom input for FOV adjustment
@@ -126,11 +157,26 @@ func handle_zoom_input(delta_zoom: float) -> void:
 
 ## Check if submarine is below periscope depth
 ## Returns true if underwater rendering should be active
+## Now checks actual wave height at camera position for accurate detection
 func is_underwater() -> bool:
-	if not simulation_state:
+	if not camera:
 		return false
 	
-	return simulation_state.submarine_depth > PERISCOPE_DEPTH
+	# Get camera position
+	var cam_pos = camera.global_position
+	
+	# If we have ocean renderer, check actual wave height at camera position
+	if ocean_renderer and ocean_renderer.initialized:
+		var wave_height = ocean_renderer.get_wave_height_3d(cam_pos)
+		# Camera is underwater if it's below the wave surface
+		# Add small buffer (0.5m) to avoid flickering at the surface
+		return cam_pos.y < (wave_height - 0.5)
+	
+	# Fallback: use fixed depth check if no ocean renderer
+	if simulation_state:
+		return simulation_state.submarine_depth > PERISCOPE_DEPTH
+	
+	return false
 
 
 ## Apply lens effect shader to periscope view

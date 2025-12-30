@@ -86,7 +86,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
   - Verify tactical map displays submarine and accepts commands
   - Ensure all tests pass, ask the user if questions arise
 
-- [-] 6. Ocean Rendering System
+- [x] 6. Ocean Rendering System
   - [x] 6.1 Integrate godot4-oceanfft addon
     - Fork and add godot4-oceanfft to project
     - Create OceanRenderer.gd wrapper class
@@ -164,8 +164,8 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 18: Underwater Rendering Activation**
     - **Validates: Requirements 5.5**
 
-- [ ] 9. External View and Fog of War
-  - [ ] 9.1 Implement ExternalView class
+- [x] 9. External View and Fog of War
+  - [x] 9.1 Implement ExternalView class
     - Create ExternalView.gd with Camera3D reference
     - Implement orbit camera controls (tilt, rotation, distance)
     - Add free camera mode toggle
@@ -180,7 +180,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 12: External Camera Orbit Behavior**
     - **Validates: Requirements 4.3**
 
-  - [ ] 9.4 Implement FogOfWarSystem class
+  - [x] 9.4 Implement FogOfWarSystem class
     - Create FogOfWarSystem.gd
     - Implement is_contact_visible method (returns true only if detected AND identified)
     - _Requirements: 4.7, 4.8_
@@ -189,7 +189,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 15: Fog of War Contact Visibility**
     - **Validates: Requirements 4.7, 4.8**
 
-  - [ ] 9.6 Integrate fog of war with external view rendering
+  - [x] 9.6 Integrate fog of war with external view rendering
     - Query fog of war system before rendering each contact
     - Always render terrain, ocean, atmosphere, sealife
     - _Requirements: 4.6, 4.7, 4.8_
@@ -230,14 +230,14 @@ c
     - Apply to terrain material
     - _Requirements: 7.4_
 
-- [ ] 12. Atmosphere and Lighting
-  - [ ] 12.1 Implement AtmosphereRenderer class
+- [x] 12. Atmosphere and Lighting
+  - [x] 12.1 Implement AtmosphereRenderer class
     - Create AtmosphereRenderer.gd extending WorldEnvironment
     - Configure ProceduralSkyMaterial for sky and clouds
     - Add volumetric fog for clouds
     - _Requirements: 8.1_
 
-  - [ ] 12.2 Implement day-night cycle
+  - [x] 12.2 Implement day-night cycle
     - Add time_of_day variable (0-24 hours)
     - Update sun position based on time
     - Adjust sky colors and lighting
@@ -247,7 +247,7 @@ c
     - **Property 22: God Ray Visibility Condition**
     - **Validates: Requirements 8.3**
 
-  - [ ] 12.4 Configure global illumination
+  - [x] 12.4 Configure global illumination
     - Enable SDFGI with 4 cascades
     - Configure SSR for water reflections
     - _Requirements: 8.4, 8.5_
