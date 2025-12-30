@@ -137,11 +137,11 @@ func is_underwater() -> bool:
 ## Requirement 5.4: Apply lens effects including distortion, chromatic aberration, and vignette
 func apply_lens_effects() -> void:
 	# Find or create lens effect overlay
-	lens_effect_rect = get_node_or_null("LensEffectOverlay")
+	var canvas_layer = get_node_or_null("LensEffectCanvas")
 	
-	if not lens_effect_rect:
+	if not canvas_layer:
 		# Create CanvasLayer for overlay
-		var canvas_layer = CanvasLayer.new()
+		canvas_layer = CanvasLayer.new()
 		canvas_layer.name = "LensEffectCanvas"
 		canvas_layer.layer = 100  # Render on top
 		add_child(canvas_layer)
@@ -153,6 +153,8 @@ func apply_lens_effects() -> void:
 		lens_effect_rect.anchor_bottom = 1.0
 		lens_effect_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		canvas_layer.add_child(lens_effect_rect)
+	else:
+		lens_effect_rect = canvas_layer.get_node("LensEffectOverlay")
 	
 	# Load and apply shader
 	var shader = load("res://shaders/periscope_lens.gdshader")
@@ -224,6 +226,16 @@ func _process(_delta: float) -> void:
 	
 	# Update underwater rendering mode based on depth
 	update_underwater_mode()
+	
+	# Show/hide lens effects based on visibility
+	_update_lens_effect_visibility()
+
+
+## Update lens effect visibility to match view visibility
+func _update_lens_effect_visibility() -> void:
+	var canvas_layer = get_node_or_null("LensEffectCanvas")
+	if canvas_layer:
+		canvas_layer.visible = visible
 
 
 ## Handle input events for periscope control
