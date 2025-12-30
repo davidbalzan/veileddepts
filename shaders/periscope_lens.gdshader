@@ -61,28 +61,27 @@ void fragment() {
 	    distorted_uv.y < 0.0 || distorted_uv.y > 1.0) {
 		// Black border for out-of-bounds areas
 		COLOR = vec4(0.0, 0.0, 0.0, 1.0);
-		return;
+	} else {
+		// Apply chromatic aberration
+		// Sample red channel with positive offset
+		vec2 red_uv = distorted_uv + vec2(chromatic_aberration, 0.0);
+		float red = texture(screen_texture, red_uv).r;
+		
+		// Sample green channel without offset
+		float green = texture(screen_texture, distorted_uv).g;
+		
+		// Sample blue channel with negative offset
+		vec2 blue_uv = distorted_uv - vec2(chromatic_aberration, 0.0);
+		float blue = texture(screen_texture, blue_uv).b;
+		
+		// Combine channels
+		vec3 color = vec3(red, green, blue);
+		
+		// Apply vignette
+		float vignette = apply_vignette(uv, vignette_strength, vignette_radius);
+		color *= vignette;
+		
+		// Output final color
+		COLOR = vec4(color, 1.0);
 	}
-	
-	// Apply chromatic aberration
-	// Sample red channel with positive offset
-	vec2 red_uv = distorted_uv + vec2(chromatic_aberration, 0.0);
-	float red = texture(screen_texture, red_uv).r;
-	
-	// Sample green channel without offset
-	float green = texture(screen_texture, distorted_uv).g;
-	
-	// Sample blue channel with negative offset
-	vec2 blue_uv = distorted_uv - vec2(chromatic_aberration, 0.0);
-	float blue = texture(screen_texture, blue_uv).b;
-	
-	// Combine channels
-	vec3 color = vec3(red, green, blue);
-	
-	// Apply vignette
-	float vignette = apply_vignette(uv, vignette_strength, vignette_radius);
-	color *= vignette;
-	
-	// Output final color
-	COLOR = vec4(color, 1.0);
 }
