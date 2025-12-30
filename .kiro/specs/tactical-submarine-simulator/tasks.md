@@ -194,29 +194,29 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - Always render terrain, ocean, atmosphere, sealife
     - _Requirements: 4.6, 4.7, 4.8_
 
-- [-] 10. Checkpoint - All Views Functional
+- [x] 10. Checkpoint - All Views Functional
   - Verify periscope view tracks submarine and responds to input
   - Verify external view orbits submarine with fog of war
   - Verify submarine physics affects all views consistently
   - Ensure all tests pass, ask the user if questions arise
-c
-- [ ] 11. Terrain System
-  - [ ] 11.1 Integrate Terrain3D addon
+
+- [x] 11. Terrain System
+  - [x] 11.1 Integrate Terrain3D addon
     - Add Terrain3D addon to project
     - Create TerrainRenderer.gd wrapper class
     - _Requirements: 7.1_
 
-  - [ ] 11.2 Generate procedural heightmap
+  - [x] 11.2 Generate procedural heightmap
     - Implement generate_heightmap using Perlin/Simplex noise
     - Configure terrain size and resolution
     - _Requirements: 7.1_
 
-  - [ ] 11.3 Implement LOD system
+  - [x] 11.3 Implement LOD system
     - Configure Terrain3D LOD levels (4 levels)
     - Implement update_lod based on camera distance
     - _Requirements: 7.2_
 
-  - [ ] 11.4 Add collision detection
+  - [x] 11.4 Add collision detection
     - Generate collision geometry from heightmap
     - Implement get_height_at for collision queries
     - _Requirements: 7.3, 7.5_
@@ -225,7 +225,7 @@ c
     - **Property 20: Terrain Collision Prevention**
     - **Validates: Requirements 7.3**
 
-  - [ ] 11.6 Add parallax occlusion shader
+  - [x] 11.6 Add parallax occlusion shader
     - Create terrain shader with parallax occlusion mapping
     - Apply to terrain material
     - _Requirements: 7.4_

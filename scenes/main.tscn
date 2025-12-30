@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://b8qvxj3yvwxqy"]
+[gd_scene load_steps=15 format=3 uid="uid://b8qvxj3yvwxqy"]
 
 [ext_resource type="Script" uid="uid://ci1os4r75yo66" path="res://scripts/core/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://bxpqklmqxolv" path="res://scripts/core/view_manager.gd" id="2_view_manager"]
@@ -12,8 +12,12 @@
 [ext_resource type="Script" uid="uid://r666wck4nojq" path="res://scripts/views/external_view.gd" id="10_external_view"]
 [ext_resource type="Script" uid="uid://b81t5wehp424s" path="res://scripts/core/fog_of_war_system.gd" id="11_fog_of_war"]
 [ext_resource type="Script" uid="uid://buikkaxxcqhyb" path="res://scripts/rendering/atmosphere_renderer.gd" id="12_atmosphere_renderer"]
+[ext_resource type="Script" path="res://scripts/rendering/terrain_renderer.gd" id="13_terrain_renderer"]
 
 [sub_resource type="Environment" id="Environment_eb6dy"]
+background_mode = 1
+ambient_light_source = 2
+ambient_light_energy = 0.5
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -55,11 +59,6 @@ pixel_size = 0.1
 text = "PERISCOPE VIEW
 Press 1, 2, 3 to switch views"
 
-[node name="OceanRenderer" type="Node3D" parent="PeriscopeView" groups=["ocean_renderer"]]
-script = ExtResource("8_ocean_renderer")
-wind_direction_degrees = 45.0
-choppiness = 1.5
-
 [node name="ExternalView" type="Node3D" parent="."]
 visible = false
 script = ExtResource("10_external_view")
@@ -75,23 +74,37 @@ text = "EXTERNAL VIEW
 Press 1, 2, 3 to switch views"
 
 [node name="SubmarineModel" type="CSGCombiner3D" parent="ExternalView"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
 [node name="Hull" type="CSGCylinder3D" parent="ExternalView/SubmarineModel"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
 radius = 1.5
 height = 20.0
 
 [node name="Conning" type="CSGBox3D" parent="ExternalView/SubmarineModel"]
-position = Vector3(0, 1.2, -2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 2)
 size = Vector3(1.0, 1.5, 3.0)
 
 [node name="Rudder" type="CSGBox3D" parent="ExternalView/SubmarineModel"]
-position = Vector3(0, -1.5, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -8)
 size = Vector3(0.2, 2.0, 2.0)
 
-[node name="OceanRenderer" type="Node3D" parent="ExternalView" groups=["ocean_renderer"]]
+[node name="Propeller" type="CSGBox3D" parent="ExternalView/SubmarineModel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10)
+size = Vector3(2.0, 2.0, 0.3)
+
+[node name="OceanRenderer" type="Node3D" parent="." groups=["ocean_renderer"]]
 script = ExtResource("8_ocean_renderer")
 wind_direction_degrees = 45.0
 choppiness = 1.5
+
+[node name="TerrainRenderer" type="Node3D" parent="." groups=["terrain_renderer"]]
+script = ExtResource("13_terrain_renderer")
+terrain_size = Vector2i(2048, 2048)
+terrain_resolution = 256
+max_height = 100.0
+min_height = -200.0
+lod_levels = 4
 
 [node name="AtmosphereRenderer" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_eb6dy")
