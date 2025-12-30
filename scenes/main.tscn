@@ -74,8 +74,19 @@ pixel_size = 0.1
 text = "EXTERNAL VIEW
 Press 1, 2, 3 to switch views"
 
-[node name="SubmarineModel" type="CSGBox3D" parent="ExternalView"]
-size = Vector3(5, 3, 20)
+[node name="SubmarineModel" type="CSGCombiner3D" parent="ExternalView"]
+
+[node name="Hull" type="CSGCylinder3D" parent="ExternalView/SubmarineModel"]
+radius = 1.5
+height = 20.0
+
+[node name="Conning" type="CSGBox3D" parent="ExternalView/SubmarineModel"]
+position = Vector3(0, 1.2, -2)
+size = Vector3(1.0, 1.5, 3.0)
+
+[node name="Rudder" type="CSGBox3D" parent="ExternalView/SubmarineModel"]
+position = Vector3(0, -1.5, 8)
+size = Vector3(0.2, 2.0, 2.0)
 
 [node name="OceanRenderer" type="Node3D" parent="ExternalView" groups=["ocean_renderer"]]
 script = ExtResource("8_ocean_renderer")

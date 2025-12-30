@@ -194,7 +194,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - Always render terrain, ocean, atmosphere, sealife
     - _Requirements: 4.6, 4.7, 4.8_
 
-- [ ] 10. Checkpoint - All Views Functional
+- [-] 10. Checkpoint - All Views Functional
   - Verify periscope view tracks submarine and responds to input
   - Verify external view orbits submarine with fog of war
   - Verify submarine physics affects all views consistently
