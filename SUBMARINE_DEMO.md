@@ -1,85 +1,62 @@
 # Submarine Movement & Terrain Demo
 
-## ✅ Submarine Can Move!
+## ⚠️ Submarine Physics Status
 
-Yes, the submarine physics system is fully implemented and functional. Here's what's working:
+The submarine physics system is **implemented but NOT YET MOVING** in the game.
 
-### Submarine Movement Features
+### What's Implemented ✅
 
-1. **Forward/Backward Movement**
-   - Set target speed: `simulation_state.set_target_speed(5.0)` (in m/s)
-   - Max speed: 10.3 m/s (20 knots)
-   - Propulsion system applies forces to reach target speed
-
-2. **Turning**
-   - Set target heading: `simulation_state.set_target_heading(45.0)` (in degrees)
-   - Speed-dependent turn rate:
-     - Slow speed (< 2 m/s): 10°/second
-     - Fast speed: 3°/second
-
-3. **Depth Control**
-   - Set target depth: `simulation_state.set_target_depth(50.0)` (in meters)
-   - Max depth: 400 meters
-   - Depth change rate: 5 m/s
-   - Uses PID controller for smooth depth changes
-
-4. **Physics Forces**
-   - Buoyancy based on ocean wave heights
+1. **SubmarinePhysics Class** - Complete implementation with:
+   - Buoyancy forces based on ocean wave heights
    - Hydrodynamic drag (proportional to velocity²)
-   - Propulsion forces
-   - Ballast control for depth changes
+   - Propulsion system with force calculations
+   - Depth control using PID controller
+   - Speed-dependent turning rates
 
-### How to Control the Submarine
+2. **Physics Integration** - Connected to:
+   - RigidBody3D submarine body
+   - Ocean renderer for wave heights
+   - Simulation state for commands
 
-**In the Tactical Map View:**
-- Click to set waypoint → submarine turns toward it
-- Use speed slider → submarine accelerates/decelerates
-- Use depth slider → submarine dives/surfaces
+3. **All Unit Tests Pass** - 14/14 submarine physics tests passing
 
-**Via Code:**
-```gdscript
-# Get simulation state
-var sim_state = get_node("/root/Main/SimulationState")
+### What's Not Working Yet ⚠️
 
-# Set movement
-sim_state.set_target_speed(8.0)  # 8 m/s forward
-sim_state.set_target_heading(90.0)  # East
-sim_state.set_target_depth(100.0)  # Dive to 100m
-```
+**The submarine is NOT propelling/moving in the actual game yet.** 
 
-### Physics Update Loop
+Possible reasons:
+- Physics forces may need tuning (force magnitudes, mass, drag coefficients)
+- Integration between tactical map commands and physics may need debugging
+- RigidBody3D configuration might need adjustment
+- Initial conditions (submarine starting at surface with zero velocity)
 
-The submarine physics runs in `_physics_process()` at 60 Hz:
-```gdscript
-func _physics_process(delta: float):
-    submarine_physics.update_physics(delta)
-    # Applies: buoyancy, drag, propulsion, depth control
-```
+**This is Task 7 (Submarine Physics)** which is marked as "in progress" in the task list.
 
 ---
 
-## 🗺️ Terrain System
+## ✅ Terrain System - FULLY WORKING
 
-The terrain system is implemented with **procedural generation** by default.
+The terrain system (Task 11) is **complete and functional**:
 
-### Current Terrain Features
+### Features Implemented
 
 1. **Procedural Heightmap Generation**
-   - Uses FastNoiseLite with Simplex noise
-   - FBM (Fractal Brownian Motion) with 6 octaves
+   - Uses FastNoiseLite with Simplex noise + FBM
    - Configurable size: 2048x2048 meters (default)
    - Resolution: 256x256 vertices
    - Height range: -200m (sea floor) to +100m (mountains)
+   - Edge falloff for realistic coastal terrain
 
-2. **LOD System**
-   - 4 LOD levels
-   - Automatic switching based on camera distance
+2. **4-Level LOD System**
+   - Automatic distance-based switching
    - Maintains performance with large terrains
+   - Tested and working ✅
 
 3. **Collision Detection**
    - HeightMapShape3D for physics collision
    - `get_height_at(position)` for height queries
    - `check_collision(position)` for penetration detection
+   - All 24 terrain tests passing ✅
 
 4. **Parallax Occlusion Shader**
    - Height-based biome coloring:
@@ -90,14 +67,21 @@ The terrain system is implemented with **procedural generation** by default.
      - Highland (+30m to +70m): Rock
      - Mountains (> +70m): Snow
    - Slope-based rock exposure on steep terrain
+   - Normal calculation from heightmap
+
+5. **World Elevation Map Support**
+   - Can load real-world elevation data
+   - Source: `src_assets/World_elevation_map.png` (21600x10800 pixels)
+   - Region selection for specific geographic areas
+   - Not enabled by default (uses procedural generation)
 
 ---
 
-## 🌍 World Elevation Map
+## 🗺️ How to Use the World Elevation Map
 
-The world elevation map (`src_assets/World_elevation_map.png`) is **available but not loaded by default**.
+The world elevation map is **available but not loaded by default**.
 
-### How to Enable the Elevation Map
+### Enable Real-World Terrain
 
 **Option 1: In the Godot Editor**
 
@@ -126,9 +110,7 @@ terrain.load_heightmap_from_file(
 terrain.regenerate_terrain()
 ```
 
-### Interesting Regions to Explore
-
-The world elevation map is 21600x10800 pixels. Here are some interesting regions (in UV coordinates 0-1):
+### Interesting Regions (UV coordinates 0-1)
 
 - **North Atlantic**: `Rect2(0.2, 0.2, 0.15, 0.15)`
   - Iceland, Greenland, North Sea
@@ -145,42 +127,104 @@ The world elevation map is 21600x10800 pixels. Here are some interesting regions
 - **Norwegian Fjords**: `Rect2(0.27, 0.18, 0.05, 0.05)`
   - Deep fjords and coastal features
 
-### Why Procedural by Default?
+---
 
-1. **Faster loading** - No need to process 21600x10800 image
-2. **Customizable** - Easy to adjust noise parameters for different looks
-3. **Deterministic** - Same seed = same terrain
-4. **Coastal shaping** - Built-in edge falloff for realistic coastlines
+## 🎯 Project Status
 
-But the elevation map is there when you want real-world geography!
+### Completed Tasks ✅
+- Task 1: Project Setup ✅
+- Task 2: Simulation State ✅
+- Task 3: View Manager ✅
+- Task 4: Tactical Map View ✅
+- Task 5: Core Systems Checkpoint ✅
+- Task 6: Ocean Rendering ✅
+- Task 8: Periscope View ✅
+- Task 9: External View & Fog of War ✅
+- Task 10: All Views Checkpoint ✅
+- **Task 11: Terrain System ✅ (THIS COMMIT)**
+- Task 12: Atmosphere & Lighting ✅
+
+### In Progress 🚧
+- **Task 7: Submarine Physics** - Implemented but not moving yet
+  - Physics calculations complete
+  - Integration needs debugging/tuning
+
+### Not Started ⏳
+- Task 13: Sealife System
+- Task 14: AI System
+- Task 15: Sonar and Detection
+- Tasks 16-21: Integration, testing, polish
 
 ---
 
-## 🎮 Testing Movement
+## 📊 Test Results
 
-To test submarine movement, run the game and:
+**Total Tests:** 160  
+**Passing:** 155 ✅ (97%)  
+**Failing:** 5 ⚠️ (pre-existing, unrelated to terrain)
 
-1. **Press `1`** to switch to Tactical Map view
-2. **Click on the map** to set a waypoint
-3. **Adjust the speed slider** (right side)
-4. **Adjust the depth slider** (right side)
-5. **Press `3`** to switch to External View and watch the submarine move!
+**Terrain Tests:** 24/24 passing ✅  
+**Submarine Physics Tests:** 14/14 passing ✅
 
-Or check the unit tests:
+---
+
+## 🔧 Next Steps
+
+### To Get Submarine Moving (Task 7)
+
+1. **Debug Physics Integration**
+   - Verify forces are being applied to RigidBody3D
+   - Check force magnitudes are appropriate for submarine mass
+   - Ensure simulation state commands reach physics system
+   - Add debug visualization for forces
+
+2. **Tune Physics Parameters**
+   - Adjust propulsion force (currently 500,000 N)
+   - Adjust drag coefficient (currently 0.04)
+   - Verify mass (currently 8,000 tons = 8,000,000 kg)
+   - Test with different initial conditions
+
+3. **Test Movement**
+   - Set target speed via tactical map
+   - Verify forces applied in correct direction
+   - Check for any physics constraints blocking movement
+   - Monitor RigidBody3D velocity and position
+
+---
+
+## 🎮 How to Test
+
+### Run the Game
+
 ```bash
-godot --headless --script addons/gut/gut_cmdln.gd -gdir=res://tests/unit -gtest=test_submarine_physics.gd -gexit
+# Open in Godot editor
+godot scenes/main.tscn
+
+# Or run headless for testing
+godot --headless --quit
 ```
 
-All 14 submarine physics tests pass! ✅
+### Run Tests
+
+```bash
+# All tests
+godot --headless --script addons/gut/gut_cmdln.gd -gdir=res://tests/unit -gexit
+
+# Terrain tests only
+godot --headless --script addons/gut/gut_cmdln.gd -gdir=res://tests/unit -gtest=test_terrain_renderer.gd -gexit
+
+# Submarine physics tests only
+godot --headless --script addons/gut/gut_cmdln.gd -gdir=res://tests/unit -gtest=test_submarine_physics.gd -gexit
+```
 
 ---
 
 ## Summary
 
-✅ **Submarine moves** - Forward, backward, turning, diving all work  
-✅ **Terrain system** - Procedural generation with LOD and collision  
-✅ **Elevation map** - Available, just needs to be enabled  
-✅ **Physics integration** - Buoyancy, drag, propulsion all functional  
-✅ **Tests passing** - 155/160 tests pass (5 failures are pre-existing)
+✅ **Terrain System** - Fully implemented and working  
+⚠️ **Submarine Physics** - Implemented but not moving yet  
+✅ **Ocean Rendering** - Working with FFT waves  
+✅ **View System** - All 3 views functional  
+✅ **Tests** - 155/160 passing (97%)
 
-The submarine is ready to explore the ocean! 🚢💨
+The terrain system is ready to explore! The submarine physics needs debugging to get movement working. 🚢
