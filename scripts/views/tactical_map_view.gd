@@ -262,17 +262,17 @@ func _process(_delta: float) -> void:
 	# Update submarine display
 	_update_submarine_display()
 	
-	# Update control sliders to match simulation state
-	if abs(speed_slider.value - simulation_state.target_speed) > 0.01:
-		speed_slider.value = simulation_state.target_speed
+	# Update control sliders to match simulation state (only if changed)
+	if speed_slider and abs(speed_slider.value - simulation_state.target_speed) > 0.01:
+		speed_slider.set_value_no_signal(simulation_state.target_speed)
 		speed_value_label.text = "%.1f m/s" % simulation_state.target_speed
 	
-	if abs(depth_slider.value - simulation_state.target_depth) > 0.1:
-		depth_slider.value = simulation_state.target_depth
+	if depth_slider and abs(depth_slider.value - simulation_state.target_depth) > 0.1:
+		depth_slider.set_value_no_signal(simulation_state.target_depth)
 		depth_value_label.text = "%.0f m" % simulation_state.target_depth
 	
-	# Queue redraw for map canvas
-	if map_canvas:
+	# Queue redraw for map canvas only if needed
+	if map_canvas and visible:
 		map_canvas.queue_redraw()
 
 

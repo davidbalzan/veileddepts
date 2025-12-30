@@ -13,8 +13,9 @@ var fetch_length: float = 100000.0  # meters
 var gravity: float = 9.81  # m/s^2
 
 # FFT grid parameters
-var grid_size: int = 256  # Must be power of 2
+var grid_size: int = 64  # Reduced from 256 for better performance
 var patch_size: float = 1000.0  # Size of ocean patch in meters
+var mesh_subdivisions: int = 32  # Separate mesh subdivision count
 
 # Wave spectrum textures
 var wave_spectrum: Texture2D
@@ -47,8 +48,8 @@ func _setup_ocean_mesh() -> void:
 	# Create a large plane mesh for the ocean surface
 	var plane_mesh = PlaneMesh.new()
 	plane_mesh.size = Vector2(patch_size, patch_size)
-	plane_mesh.subdivide_width = grid_size
-	plane_mesh.subdivide_depth = grid_size
+	plane_mesh.subdivide_width = mesh_subdivisions  # Use lower subdivision for mesh
+	plane_mesh.subdivide_depth = mesh_subdivisions
 	
 	ocean_mesh.mesh = plane_mesh
 	ocean_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -297,11 +298,9 @@ func update_waves(delta: float) -> void:
 	if ocean_material:
 		ocean_material.set_shader_parameter("time", time)
 	
-	# Update foam based on Jacobian
-	_update_foam(delta)
-	
-	# In a full implementation, this would update the FFT textures
-	# For now, we'll use a simplified approach with shader-based animation
+	# NOTE: Foam update disabled for performance
+	# The foam is now handled entirely in the shader
+	# _update_foam(delta)
 
 func _update_foam(delta: float) -> void:
 	"""Update foam texture based on Jacobian determinant"""
