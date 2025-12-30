@@ -1,0 +1,14 @@
+# Git files
+.git/
+.gitignore
+
+# Kiro specs
+.kiro/
+
+# VS Code
+.vscode/
+
+# Documentation
+*.md
+
+src_assets/
