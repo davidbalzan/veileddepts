@@ -601,18 +601,18 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 	var sideways_velocity = velocity_2d.dot(right_2d)
 	
 	# Apply anti-slip force even for small sideways velocities
-	if abs(sideways_velocity) > 0.05:  # Reduced threshold for more aggressive correction
-		# Very strong anti-slip force to eliminate sideways motion
-		# This ensures the submarine moves in the direction it's pointing
-		var anti_slip_force = -sideways_velocity * mid_stabilizer_effectiveness * 5.0  # Increased strength significantly
+	if abs(sideways_velocity) > 0.1:  # Increased threshold to reduce constant corrections
+		# Strong but not excessive anti-slip force
+		# Balance between eliminating sideways motion and system stability
+		var anti_slip_force = -sideways_velocity * mid_stabilizer_effectiveness * 2.0  # Reduced from 5.0 to 2.0
 		var sideways_direction = Vector3(right_2d.x, 0, right_2d.y)
 		var anti_slip_vector = sideways_direction * anti_slip_force
 		
 		# Apply at center of mass (no torque, just translation correction)
 		submarine_body.apply_central_force(anti_slip_vector)
 		
-		# Debug output for sideways movement
-		if abs(sideways_velocity) > 1.0:  # Only warn for significant sideways movement
+		# Debug output for sideways movement (less frequent)
+		if abs(sideways_velocity) > 2.0:  # Only warn for very significant sideways movement
 			print("Anti-slip: sideways velocity %.2f m/s, applying force %.0f N" % [sideways_velocity, anti_slip_force])
 
 ## Apply depth control forces to reach target depth
@@ -850,23 +850,27 @@ func _align_velocity_with_heading(delta: float) -> void:
 	if alignment > alignment_threshold:
 		return
 	
+	# Don't apply velocity alignment if speed is being clamped (prevents fighting with speed limiter)
+	if speed > max_speed * 1.05:  # If speed is significantly over max, let velocity clamping handle it
+		return
+	
 	# Calculate the desired velocity (aligned with heading)
 	var desired_velocity = forward_direction * speed
 	
-	# More aggressive alignment for better control
-	var alignment_strength = 5.0  # Increased from 2.0 for faster correction
+	# Much gentler alignment for stability - the anti-slip system handles most of this
+	var alignment_strength = 1.0  # Reduced from 5.0 - let anti-slip do the heavy lifting
 	var velocity_correction = (desired_velocity - velocity) * alignment_strength * delta
 	
 	# Apply velocity correction as a force
 	var correction_force = velocity_correction * submarine_body.mass / delta
 	
-	# Increase max correction force for better control
-	var max_correction_force = propulsion_force_max * 0.5  # Increased from 30% to 50%
+	# Reduce max correction force significantly to prevent instability
+	var max_correction_force = propulsion_force_max * 0.1  # Reduced from 50% to 10%
 	if correction_force.length() > max_correction_force:
 		correction_force = correction_force.normalized() * max_correction_force
 	
 	submarine_body.apply_central_force(correction_force)
 	
-	# Debug output for significant misalignment
-	if alignment < 0.8:  # Less than ~36° alignment
+	# Debug output for significant misalignment (less frequent)
+	if alignment < 0.7:  # Only warn for very poor alignment
 		print("Velocity alignment: alignment %.3f, correction force %.0f N" % [alignment, correction_force.length()])
