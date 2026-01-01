@@ -249,13 +249,8 @@ func apply_drag(_delta: float) -> void:
 	if speed < 0.01:
 		return  # No drag at very low speeds
 	
-	# Get submarine's forward direction
-	# Forward direction: rotation.y=0 means facing -Z (North in our coordinate system)
-	var forward_direction = Vector3(
-		sin(submarine_body.rotation.y),
-		0.0,
-		-cos(submarine_body.rotation.y)
-	)
+	# Get submarine's forward direction from transform basis (consistent with propulsion)
+	var forward_direction = -submarine_body.global_transform.basis.z
 	
 	# Calculate velocity components relative to submarine orientation
 	var velocity_2d = Vector2(velocity.x, velocity.z)
@@ -297,13 +292,6 @@ func apply_propulsion(delta: float) -> void:
 	# This ensures we match the actual model orientation
 	var forward_direction = -submarine_body.global_transform.basis.z
 	
-	# DEBUG: Verify this matches what we expect
-	var body_heading_rad = submarine_body.rotation.y
-	print("PROPULSION: rot.y=%.3f° fwd_from_basis=(%.3f,%.3f,%.3f)" % [
-		rad_to_deg(body_heading_rad),
-		forward_direction.x, forward_direction.y, forward_direction.z
-	])
-	
 	# Calculate current speed along submarine's axis
 	var current_velocity = submarine_body.linear_velocity
 	var speed_along_axis = current_velocity.dot(forward_direction)
@@ -337,38 +325,13 @@ func apply_propulsion(delta: float) -> void:
 	# Apply force at center of mass, along submarine's forward direction
 	submarine_body.apply_central_force(force_vector)
 	
-	# CRITICAL DEBUG: Verify force was applied
-	if int(Time.get_ticks_msec() / 500.0) % 4 == 0:
-		var frame_count = Engine.get_process_frames()
-		if frame_count % 30 == 0:
-			var vel_after = submarine_body.linear_velocity
-			print("FORCE APPLICATION: force_vec=(%.0f,%.0f,%.0f) vel_after=(%.2f,%.2f,%.2f)" % [
-				force_vector.x, force_vector.y, force_vector.z,
-				vel_after.x, vel_after.y, vel_after.z
-			])
-	
 	# Apply turning torque to steer toward target heading
 	_apply_steering_torque(target_heading, speed_along_axis, delta)
-	
-	# Debug: Print movement info occasionally
-	if int(Time.get_ticks_msec() / 1000.0) % 2 == 0:
-		var frame_count = Engine.get_process_frames()
-		if frame_count % 120 == 0:  # Every 2 seconds
-			var body_heading_deg = rad_to_deg(body_heading_rad)
-			while body_heading_deg < 0:
-				body_heading_deg += 360.0
-			while body_heading_deg >= 360:
-				body_heading_deg -= 360.0
-			print("Propulsion: speed=%.1f/%.1f force=%.0fN body_heading=%.0f° target=%.0f° fwd_dir=(%.2f,%.2f) FORCE_VECTOR=(%.0f,%.0f,%.0f)" % [
-				speed_along_axis, target_speed, propulsion_force, 
-				body_heading_deg, target_heading, forward_direction.x, forward_direction.z,
-				force_vector.x, force_vector.y, force_vector.z
-			])
 
 
 ## Apply steering torque to turn submarine toward target heading
 ## Uses rudder physics: turning force proportional to speed and rudder angle
-func _apply_steering_torque(target_heading: float, current_speed: float, delta: float) -> void:
+func _apply_steering_torque(target_heading: float, current_speed: float, _delta: float) -> void:
 	if not submarine_body:
 		return
 	
@@ -443,67 +406,6 @@ func _apply_steering_torque(target_heading: float, current_speed: float, delta: 
 	if abs(current_speed) > 1.0:
 		var thrust_vector_force = sideways_direction * rudder_angle * 100000.0
 		submarine_body.apply_force(thrust_vector_force, stern_position)
-	
-	# Debug: Print steering info occasionally
-	if abs(heading_error) > 0.1:  # Only when actually turning
-		if int(Time.get_ticks_msec() / 1000.0) % 2 == 0:
-			var frame_count = Engine.get_process_frames()
-			if frame_count % 120 == 0:  # Every 2 seconds
-				var body_heading_deg = rad_to_deg(current_heading_rad)
-				while body_heading_deg < 0:
-					body_heading_deg += 360.0
-				while body_heading_deg >= 360:
-					body_heading_deg -= 360.0
-				print("Rudder: body=%.0f° target=%.0f° error=%.1f° rudder=%.1f° ang_vel=%.3f slip=%.2f" % [
-					body_heading_deg, target_heading, rad_to_deg(heading_error), 
-					rad_to_deg(rudder_angle), angular_velocity, sideways_velocity
-				])
-
-## Apply turning force based on speed-dependent maneuverability
-## Validates: Requirements 11.4
-func _apply_turning_force(delta: float) -> void:
-	if not submarine_body or not simulation_state:
-		return
-	
-	var current_velocity = submarine_body.linear_velocity
-	var speed = current_velocity.length()
-	
-	# Calculate current heading from velocity
-	var velocity_2d = Vector2(current_velocity.x, current_velocity.z)
-	if velocity_2d.length() < 0.1:
-		return  # No turning at very low speeds
-	
-	var current_heading_rad = atan2(velocity_2d.x, velocity_2d.y)
-	var current_heading_deg = rad_to_deg(current_heading_rad)
-	
-	# Normalize to 0-360
-	while current_heading_deg < 0:
-		current_heading_deg += 360.0
-	while current_heading_deg >= 360:
-		current_heading_deg -= 360.0
-	
-	# Calculate heading error (use TARGET heading)
-	var target_heading = simulation_state.target_heading
-	var heading_error = target_heading - current_heading_deg
-	
-	# Normalize heading error to [-180, 180]
-	while heading_error > 180:
-		heading_error -= 360
-	while heading_error < -180:
-		heading_error += 360
-	
-	# Calculate turn rate based on speed (inverse relationship)
-	# Use absolute speed for turn rate calculation
-	var speed_ratio = clamp(abs(speed) / max_speed, 0.0, 1.0)
-	var max_turn_rate = lerp(turn_rate_slow, turn_rate_fast, speed_ratio)
-	
-	# Apply turn rate limit
-	var turn_amount = clamp(heading_error, -max_turn_rate * delta, max_turn_rate * delta)
-	
-	# Apply torque to turn the submarine
-	if abs(heading_error) > 1.0:  # Only turn if error is significant
-		var torque_magnitude = turn_amount * 100000.0  # Scale factor for torque
-		submarine_body.apply_torque(Vector3.UP * torque_magnitude)
 
 ## Apply depth control forces to reach target depth
 ## Validates: Requirements 11.1

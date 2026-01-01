@@ -302,9 +302,9 @@ func _input(event: InputEvent) -> void:
 		
 		# Mouse wheel for zoom
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_handle_zoom(1.1)
+			_handle_zoom(1.1, mouse_event.position)
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_handle_zoom(0.9)
+			_handle_zoom(0.9, mouse_event.position)
 	
 	# Handle panning
 	elif event is InputEventMouseMotion and is_panning:
@@ -342,9 +342,24 @@ func _handle_waypoint_placement(screen_pos: Vector2) -> void:
 
 
 ## Handle zoom input
-func _handle_zoom(zoom_factor: float) -> void:
+func _handle_zoom(zoom_factor: float, mouse_pos: Vector2 = Vector2.ZERO) -> void:
+	var old_zoom = map_zoom
 	map_zoom *= zoom_factor
 	map_zoom = clamp(map_zoom, MIN_ZOOM, MAX_ZOOM)
+	
+	# If mouse position provided and zoom actually changed, adjust pan to zoom toward mouse
+	if mouse_pos != Vector2.ZERO and abs(map_zoom - old_zoom) > 0.001 and simulation_state:
+		# Get world position under mouse cursor before zoom change
+		var temp_zoom = map_zoom
+		map_zoom = old_zoom
+		var world_under_mouse = screen_to_world(mouse_pos)
+		
+		# Now with new zoom, calculate where that world position appears
+		map_zoom = temp_zoom
+		var new_screen_pos = world_to_screen(world_under_mouse)
+		
+		# Adjust pan so the world position stays under the mouse
+		map_pan_offset += (mouse_pos - new_screen_pos)
 
 
 ## Speed slider changed callback
