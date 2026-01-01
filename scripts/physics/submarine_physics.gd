@@ -452,16 +452,18 @@ func apply_propulsion(delta: float) -> void:
 	alignment_factor = max(0.0, alignment_factor)  # Only positive alignment
 	
 	# Reduce propulsion when not aligned with target heading
-	# This prevents sideways movement during turns
+	# This prevents sideways movement during turns, but allows forward motion to build up speed
+	# for effective steering (submarines need water flow over rudder to turn)
 	var heading_threshold = 15.0  # 15° tolerance
 	var propulsion_multiplier = 1.0
 	if abs(heading_error_deg) > heading_threshold:
-		# At low speeds, allow more propulsion to help initiate turns
-		var speed_ratio = clamp(abs(speed_along_axis) / 5.0, 0.0, 1.0)  # 0 to 1 over 0-5 m/s
-		var min_propulsion = 0.5 + (0.4 * (1.0 - speed_ratio))  # 90% at stop, 50% at speed
+		# At low speeds, allow more propulsion to build up speed for steering
+		# Real submarines often need to accelerate before they can turn effectively
+		var speed_ratio = clamp(abs(speed_along_axis) / 3.0, 0.0, 1.0)  # 0 to 1 over 0-3 m/s
+		var min_propulsion = 0.7 + (0.2 * (1.0 - speed_ratio))  # 90% at stop, 70% at speed
 		
-		# Gradually reduce propulsion as heading error increases
-		propulsion_multiplier = alignment_factor * 0.5 + min_propulsion
+		# Gradually reduce propulsion as heading error increases, but maintain minimum for steering
+		propulsion_multiplier = alignment_factor * 0.3 + min_propulsion
 	
 	# Calculate speed error
 	var speed_error = target_speed - speed_along_axis
@@ -540,19 +542,35 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 	var max_rudder_angle = deg_to_rad(30.0)
 	var rudder_angle = clamp(heading_error_rad, -max_rudder_angle, max_rudder_angle)
 	
+	# Realistic rudder physics: steering effectiveness depends on water flow speed
+	# No flow = no steering (submarines can't turn when stationary)
+	var water_speed = abs(current_speed)
+	
+	# Minimum speed required for effective steering (about 1 knot = 0.5 m/s)
+	var min_steering_speed = 0.5
+	if water_speed < min_steering_speed:
+		# Very limited steering at low speeds - submarines use bow/stern thrusters for this
+		# For now, allow minimal steering for gameplay, but make it very weak
+		water_speed = water_speed * 0.1  # 10% effectiveness at low speeds
+	
+	# Steering torque is proportional to water speed squared (like real rudder physics)
+	# Higher speeds = much more effective steering
+	var speed_factor = water_speed * water_speed
+	
 	# Apply steering as pure torque around Y-axis
 	# In Godot: positive Y torque = counter-clockwise rotation (left turn)
 	# Navigation: positive heading error = need to turn right (clockwise)
 	# So we NEGATE the torque to get correct turn direction
-	var speed_factor = abs(current_speed) + 1.0  # Add minimum for low-speed maneuvering
-	
-	# Calculate steering torque - use a dedicated torque coefficient
 	var torque_coefficient = 50000000.0  # 50 MN·m base torque
 	var steering_torque = -speed_factor * rudder_angle * torque_coefficient  # NEGATED
 	
 	# Apply torque directly
 	var torque_vector = Vector3(0, steering_torque, 0)
 	submarine_body.apply_torque(torque_vector)
+	
+	# Debug output for low-speed steering attempts
+	if abs(heading_error_deg) > 5.0 and water_speed < min_steering_speed:
+		print("Low-speed steering: speed=%.2f m/s, limited effectiveness" % water_speed)
 	
 	# Forward stabilizers - resist unwanted rotation
 	var angular_velocity = submarine_body.angular_velocity.y
@@ -565,22 +583,29 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 			submarine_body.apply_torque(Vector3(0, damping_torque, 0))
 	
 	# Anti-slip system - eliminate sideways velocity
-	# Use current_heading (degrees) converted to radians for vector calculation
-	var current_heading_for_slip = deg_to_rad(current_heading)
+	# Calculate current heading from forward direction (consistent with other calculations)
+	var anti_slip_forward_dir = -submarine_body.global_transform.basis.z
+	var current_heading_rad = atan2(anti_slip_forward_dir.x, -anti_slip_forward_dir.z)
+	
 	var velocity_2d = Vector2(submarine_body.linear_velocity.x, submarine_body.linear_velocity.z)
-	var forward_2d = Vector2(sin(current_heading_for_slip), -cos(current_heading_for_slip))
+	var forward_2d = Vector2(sin(current_heading_rad), -cos(current_heading_rad))
 	var right_2d = Vector2(forward_2d.y, -forward_2d.x)
 	var sideways_velocity = velocity_2d.dot(right_2d)
 	
-	if abs(sideways_velocity) > 0.1:
-		# Strong anti-slip force to eliminate sideways motion
+	# Apply anti-slip force even for small sideways velocities
+	if abs(sideways_velocity) > 0.05:  # Reduced threshold for more aggressive correction
+		# Very strong anti-slip force to eliminate sideways motion
 		# This ensures the submarine moves in the direction it's pointing
-		var anti_slip_force = -sideways_velocity * mid_stabilizer_effectiveness * 2.0  # Increased strength
+		var anti_slip_force = -sideways_velocity * mid_stabilizer_effectiveness * 5.0  # Increased strength significantly
 		var sideways_direction = Vector3(right_2d.x, 0, right_2d.y)
 		var anti_slip_vector = sideways_direction * anti_slip_force
 		
 		# Apply at center of mass (no torque, just translation correction)
 		submarine_body.apply_central_force(anti_slip_vector)
+		
+		# Debug output for sideways movement
+		if abs(sideways_velocity) > 1.0:  # Only warn for significant sideways movement
+			print("Anti-slip: sideways velocity %.2f m/s, applying force %.0f N" % [sideways_velocity, anti_slip_force])
 
 ## Apply depth control forces to reach target depth
 ## Validates: Requirements 11.1
@@ -812,24 +837,28 @@ func _align_velocity_with_heading(delta: float) -> void:
 	# Calculate alignment between velocity and heading
 	var alignment = velocity_direction.dot(forward_direction)
 	
-	# If velocity is reasonably aligned, don't interfere
-	var alignment_threshold = 0.9  # cos(~25°)
+	# More aggressive alignment - allow less sideways drift
+	var alignment_threshold = 0.95  # cos(~18°) - much stricter than before
 	if alignment > alignment_threshold:
 		return
 	
 	# Calculate the desired velocity (aligned with heading)
 	var desired_velocity = forward_direction * speed
 	
-	# Gradually align velocity with heading
-	var alignment_strength = 2.0  # How quickly to align (higher = faster)
+	# More aggressive alignment for better control
+	var alignment_strength = 5.0  # Increased from 2.0 for faster correction
 	var velocity_correction = (desired_velocity - velocity) * alignment_strength * delta
 	
 	# Apply velocity correction as a force
 	var correction_force = velocity_correction * submarine_body.mass / delta
 	
-	# Limit correction force to prevent instability
-	var max_correction_force = propulsion_force_max * 0.3  # 30% of max propulsion
+	# Increase max correction force for better control
+	var max_correction_force = propulsion_force_max * 0.5  # Increased from 30% to 50%
 	if correction_force.length() > max_correction_force:
 		correction_force = correction_force.normalized() * max_correction_force
 	
 	submarine_body.apply_central_force(correction_force)
+	
+	# Debug output for significant misalignment
+	if alignment < 0.8:  # Less than ~36° alignment
+		print("Velocity alignment: alignment %.3f, correction force %.0f N" % [alignment, correction_force.length()])
