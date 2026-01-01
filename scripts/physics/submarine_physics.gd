@@ -52,9 +52,95 @@ var current_ballast_force: float = 0.0
 var depth_error_integral: float = 0.0
 var previous_depth_error: float = 0.0
 
+# Cached values for performance
+var _cached_forward_direction: Vector3 = Vector3.FORWARD
+var _cache_frame: int = -1
+
+# Submarine class presets
+const SUBMARINE_CLASSES = {
+	"Los_Angeles_Class": {
+		"class_name": "Los Angeles Class (SSN-688)",
+		"mass": 6000.0,  # tons
+		"max_speed": 15.4,  # 30 knots
+		"max_depth": 450.0,
+		"propulsion_force_max": 45000000.0,
+		"forward_drag": 1800.0,
+		"sideways_drag": 700000.0,
+		"rudder_effectiveness": 300000.0,
+		"stabilizer_effectiveness": 12000.0,
+		"mid_stabilizer_effectiveness": 200000.0,
+		"ballast_force_max": 45000000.0,
+		"submarine_volume": 6000.0
+	},
+	"Ohio_Class": {
+		"class_name": "Ohio Class (SSBN-726)",
+		"mass": 18000.0,  # tons
+		"max_speed": 12.9,  # 25 knots
+		"max_depth": 300.0,
+		"propulsion_force_max": 60000000.0,
+		"forward_drag": 2500.0,
+		"sideways_drag": 1000000.0,
+		"rudder_effectiveness": 150000.0,
+		"stabilizer_effectiveness": 8000.0,
+		"mid_stabilizer_effectiveness": 300000.0,
+		"ballast_force_max": 70000000.0,
+		"submarine_volume": 18000.0
+	},
+	"Virginia_Class": {
+		"class_name": "Virginia Class (SSN-774)",
+		"mass": 7800.0,  # tons
+		"max_speed": 12.9,  # 25 knots
+		"max_depth": 490.0,
+		"propulsion_force_max": 40000000.0,
+		"forward_drag": 1900.0,
+		"sideways_drag": 750000.0,
+		"rudder_effectiveness": 280000.0,
+		"stabilizer_effectiveness": 11000.0,
+		"mid_stabilizer_effectiveness": 220000.0,
+		"ballast_force_max": 48000000.0,
+		"submarine_volume": 7800.0
+	},
+	"Seawolf_Class": {
+		"class_name": "Seawolf Class (SSN-21)",
+		"mass": 9100.0,  # tons
+		"max_speed": 18.0,  # 35 knots
+		"max_depth": 600.0,
+		"propulsion_force_max": 55000000.0,
+		"forward_drag": 1700.0,
+		"sideways_drag": 650000.0,
+		"rudder_effectiveness": 350000.0,
+		"stabilizer_effectiveness": 13000.0,
+		"mid_stabilizer_effectiveness": 180000.0,
+		"ballast_force_max": 52000000.0,
+		"submarine_volume": 9100.0
+	},
+	"Default": {
+		"class_name": "Generic Attack Submarine",
+		"mass": 8000.0,
+		"max_speed": 10.3,
+		"max_depth": 400.0,
+		"propulsion_force_max": 35000000.0,
+		"forward_drag": 2000.0,
+		"sideways_drag": 800000.0,
+		"rudder_effectiveness": 250000.0,
+		"stabilizer_effectiveness": 10000.0,
+		"mid_stabilizer_effectiveness": 250000.0,
+		"ballast_force_max": 50000000.0,
+		"submarine_volume": 8000.0
+	}
+}
+
 func _ready() -> void:
 	# Physics will be initialized when connected to other systems
 	pass
+
+## Get cached forward direction (recalculated once per frame)
+func _get_forward_direction() -> Vector3:
+	var frame = Engine.get_process_frames()
+	if _cache_frame != frame:
+		_cached_forward_direction = -submarine_body.global_transform.basis.z
+		_cache_frame = frame
+	return _cached_forward_direction
 
 ## Initialize the physics system with required references
 func initialize(p_submarine_body: RigidBody3D, p_ocean_renderer: OceanRenderer, p_simulation_state: SimulationState) -> void:
@@ -120,6 +206,19 @@ func configure_submarine_class(config: Dictionary) -> void:
 	
 	print("SubmarinePhysics configured for class: ", config.get("class_name", "Custom"))
 
+## Load a predefined submarine class by name
+func load_submarine_class(sub_class: String) -> bool:
+	if not SUBMARINE_CLASSES.has(sub_class):
+		push_error("SubmarinePhysics: Unknown submarine class '%s'" % sub_class)
+		return false
+	
+	configure_submarine_class(SUBMARINE_CLASSES[sub_class])
+	return true
+
+## Get list of available submarine class names
+func get_available_classes() -> Array:
+	return SUBMARINE_CLASSES.keys()
+
 ## Apply buoyancy force based on ocean wave heights and submarine displacement
 ## Validates: Requirements 11.1, 11.5
 func apply_buoyancy(delta: float) -> void:
@@ -164,6 +263,15 @@ func apply_buoyancy(delta: float) -> void:
 	var depth_factor = 1.0 - clamp(current_depth / 10.0, 0.0, 1.0)
 	var target_factor = 1.0 - clamp(target_depth / 5.0, 0.0, 1.0)
 	var wave_influence = depth_factor * target_factor
+	
+	# Early exit if deep underwater - skip expensive wave sampling
+	if wave_influence < 0.01:
+		# Apply underwater stabilization only
+		if current_depth > 5.0:
+			var stabilization_factor = clamp((current_depth - 5.0) / 10.0, 0.0, 1.0)
+			var vertical_damping = -submarine_body.linear_velocity.y * 40000.0 * stabilization_factor
+			submarine_body.apply_central_force(Vector3.UP * vertical_damping)
+		return
 	
 	# Debug output for diving attempts (remove after testing)
 	# if target_depth > 0.1:
@@ -249,8 +357,8 @@ func apply_drag(_delta: float) -> void:
 	if speed < 0.01:
 		return  # No drag at very low speeds
 	
-	# Get submarine's forward direction from transform basis (consistent with propulsion)
-	var forward_direction = -submarine_body.global_transform.basis.z
+	# Get submarine's forward direction from cache
+	var forward_direction = _get_forward_direction()
 	
 	# Calculate velocity components relative to submarine orientation
 	var velocity_2d = Vector2(velocity.x, velocity.z)
@@ -271,11 +379,12 @@ func apply_drag(_delta: float) -> void:
 	var forward_drag_force = forward_drag_coef * abs(forward_speed) * forward_speed
 	var sideways_drag_force = sideways_drag_coef * sideways_speed * sideways_speed
 	
-	# Total drag magnitude
-	var drag_magnitude = abs(forward_drag_force) + sideways_drag_force
+	# Apply drag forces separately along forward and sideways axes (more physically accurate)
+	var forward_drag_vec = -forward_2d.normalized() * forward_drag_force if forward_2d.length() > 0.01 else Vector2.ZERO
+	var sideways_drag_vec = -right_2d.normalized() * sideways_drag_force if right_2d.length() > 0.01 else Vector2.ZERO
+	var drag_force_2d = forward_drag_vec + sideways_drag_vec
+	var drag_force = Vector3(drag_force_2d.x, 0, drag_force_2d.y)
 	
-	# Apply drag as a force (not velocity change!)
-	var drag_force = -velocity.normalized() * drag_magnitude
 	submarine_body.apply_central_force(drag_force)
 
 ## Apply propulsion force to reach target speed
@@ -288,9 +397,8 @@ func apply_propulsion(delta: float) -> void:
 	var target_speed = simulation_state.target_speed
 	var target_heading = simulation_state.target_heading
 	
-	# Get submarine's current forward direction from transform basis (NOT from rotation.y)
-	# This ensures we match the actual model orientation
-	var forward_direction = -submarine_body.global_transform.basis.z
+	# Get submarine's current forward direction from cache
+	var forward_direction = _get_forward_direction()
 	
 	# Calculate current speed along submarine's axis
 	var current_velocity = submarine_body.linear_velocity
