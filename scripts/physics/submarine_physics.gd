@@ -551,17 +551,19 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 	if water_speed < min_steering_speed:
 		# Very limited steering at low speeds - submarines use bow/stern thrusters for this
 		# For now, allow minimal steering for gameplay, but make it very weak
-		water_speed = water_speed * 0.1  # 10% effectiveness at low speeds
+		water_speed = water_speed * 0.2  # 20% effectiveness at low speeds
 	
-	# Steering torque is proportional to water speed squared (like real rudder physics)
-	# Higher speeds = much more effective steering
-	var speed_factor = water_speed * water_speed
+	# Use linear speed relationship for more reasonable steering
+	# Cap the speed factor to prevent excessive turning at high speeds
+	var max_steering_speed = 8.0  # m/s - beyond this, steering doesn't get more effective
+	var capped_speed = min(water_speed, max_steering_speed)
+	var speed_factor = capped_speed
 	
 	# Apply steering as pure torque around Y-axis
 	# In Godot: positive Y torque = counter-clockwise rotation (left turn)
 	# Navigation: positive heading error = need to turn right (clockwise)
 	# So we NEGATE the torque to get correct turn direction
-	var torque_coefficient = 50000000.0  # 50 MN·m base torque
+	var torque_coefficient = 8000000.0  # Reduced from 50M to 8M for reasonable turning
 	var steering_torque = -speed_factor * rudder_angle * torque_coefficient  # NEGATED
 	
 	# Apply torque directly
@@ -572,15 +574,21 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 	if abs(heading_error_deg) > 5.0 and water_speed < min_steering_speed:
 		print("Low-speed steering: speed=%.2f m/s, limited effectiveness" % water_speed)
 	
-	# Forward stabilizers - resist unwanted rotation
+	# Forward stabilizers - resist unwanted rotation and limit turn rate
 	var angular_velocity = submarine_body.angular_velocity.y
-	if abs(angular_velocity) > 0.01:
-		# Damping torque opposes rotation when we're turning too fast
-		var max_turn_rate = deg_to_rad(30.0)  # 30°/s max turn rate
-		if abs(angular_velocity) > max_turn_rate:
-			var excess_rotation = abs(angular_velocity) - max_turn_rate
-			var damping_torque = -sign(angular_velocity) * excess_rotation * 20000000.0  # Strong damping
-			submarine_body.apply_torque(Vector3(0, damping_torque, 0))
+	
+	# Realistic maximum turn rate for a large submarine (much slower than 30°/s)
+	var max_turn_rate = deg_to_rad(15.0)  # 15°/s max turn rate (more realistic)
+	
+	if abs(angular_velocity) > max_turn_rate:
+		# Apply strong damping when exceeding maximum turn rate
+		var excess_rotation = abs(angular_velocity) - max_turn_rate
+		var damping_torque = -sign(angular_velocity) * excess_rotation * 30000000.0  # Increased damping
+		submarine_body.apply_torque(Vector3(0, damping_torque, 0))
+	elif abs(angular_velocity) > 0.01:
+		# Apply light damping for stability even at normal turn rates
+		var stability_damping = -angular_velocity * 5000000.0  # Light damping for stability
+		submarine_body.apply_torque(Vector3(0, stability_damping, 0))
 	
 	# Anti-slip system - eliminate sideways velocity
 	# Calculate current heading from forward direction (consistent with other calculations)
