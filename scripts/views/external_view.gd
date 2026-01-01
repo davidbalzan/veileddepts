@@ -122,8 +122,17 @@ func update_camera_position() -> void:
 		# Set camera position
 		camera.global_position = submarine_pos + offset
 		
-		# Look at submarine
-		camera.look_at(submarine_pos, Vector3.UP)
+		# Safety check: Ensure camera and target are not at same position
+		var look_direction = submarine_pos - camera.global_position
+		if look_direction.length_squared() > 0.01:
+			# Additional safety: Check if look direction is colinear with up vector
+			var up_dot = abs(look_direction.normalized().dot(Vector3.UP))
+			if up_dot < 0.99:  # Not nearly vertical
+				camera.look_at(submarine_pos, Vector3.UP)
+			else:
+				# Use alternative up vector when nearly vertical
+				var alt_up = Vector3.RIGHT if abs(look_direction.x) < 0.5 else Vector3.FORWARD
+				camera.look_at(submarine_pos, alt_up)
 
 
 ## Handle tilt input for vertical camera angle adjustment
@@ -440,10 +449,14 @@ func _position_arrow(arrow: Node3D, start_pos: Vector3, direction: Vector3, leng
 	# Arrows point along +Y axis by default, so we need to rotate to align with direction
 	if direction.length() > 0.001:
 		var normalized_dir = direction.normalized()
-		# Point the arrow in the direction
-		arrow.look_at(start_pos + normalized_dir, Vector3.UP)
-		# Rotate 90° around local X axis to align arrow (which points up) with forward direction
-		arrow.rotate_object_local(Vector3.RIGHT, -PI / 2)
+		var target_pos = start_pos + normalized_dir
+		
+		# Only call look_at if target is different from origin
+		if start_pos.distance_to(target_pos) > 0.001:
+			# Point the arrow in the direction
+			arrow.look_at(target_pos, Vector3.UP)
+			# Rotate 90° around local X axis to align arrow (which points up) with forward direction
+			arrow.rotate_object_local(Vector3.RIGHT, -PI / 2)
 	
 	# Scale arrow to desired length
 	var shaft = arrow.get_node_or_null("Shaft")

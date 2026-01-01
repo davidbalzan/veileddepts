@@ -140,6 +140,15 @@ func _get_forward_direction() -> Vector3:
 	if _cache_frame != frame:
 		_cached_forward_direction = -submarine_body.global_transform.basis.z
 		_cache_frame = frame
+		
+		# Safety check for NaN values
+		if not _cached_forward_direction.is_finite():
+			push_error("SubmarinePhysics: Forward direction is NaN! Resetting to default.")
+			_cached_forward_direction = Vector3.FORWARD
+			# Reset submarine transform to prevent cascading NaN
+			if submarine_body:
+				submarine_body.global_transform = Transform3D(Basis(), submarine_body.global_position)
+	
 	return _cached_forward_direction
 
 ## Initialize the physics system with required references
@@ -380,10 +389,22 @@ func apply_drag(_delta: float) -> void:
 	var sideways_drag_force = sideways_drag_coef * sideways_speed * sideways_speed
 	
 	# Apply drag forces separately along forward and sideways axes (more physically accurate)
-	var forward_drag_vec = -forward_2d.normalized() * forward_drag_force if forward_2d.length() > 0.01 else Vector2.ZERO
-	var sideways_drag_vec = -right_2d.normalized() * sideways_drag_force if right_2d.length() > 0.01 else Vector2.ZERO
+	# Safety: Check vector length BEFORE normalizing to prevent NaN
+	var forward_drag_vec = Vector2.ZERO
+	if forward_2d.length_squared() > 0.0001:  # Use length_squared for efficiency
+		forward_drag_vec = -forward_2d.normalized() * forward_drag_force
+	
+	var sideways_drag_vec = Vector2.ZERO
+	if right_2d.length_squared() > 0.0001:
+		sideways_drag_vec = -right_2d.normalized() * sideways_drag_force
+	
 	var drag_force_2d = forward_drag_vec + sideways_drag_vec
 	var drag_force = Vector3(drag_force_2d.x, 0, drag_force_2d.y)
+	
+	# Safety check for NaN
+	if not drag_force.is_finite():
+		push_warning("SubmarinePhysics: Drag force is NaN, skipping")
+		return
 	
 	submarine_body.apply_central_force(drag_force)
 
@@ -429,6 +450,11 @@ func apply_propulsion(delta: float) -> void:
 	
 	# Calculate the actual force vector being applied
 	var force_vector = forward_direction * propulsion_force
+	
+	# Safety check for NaN
+	if not force_vector.is_finite():
+		push_warning("SubmarinePhysics: Propulsion force vector is NaN, skipping")
+		return
 	
 	# Apply force at center of mass, along submarine's forward direction
 	submarine_body.apply_central_force(force_vector)
@@ -598,6 +624,20 @@ func apply_depth_control(delta: float) -> void:
 func update_physics(delta: float) -> void:
 	if not submarine_body:
 		return
+	
+	# Safety check: Detect and fix NaN in submarine state
+	var pos = submarine_body.global_position
+	var vel = submarine_body.linear_velocity
+	var ang_vel = submarine_body.angular_velocity
+	
+	if not pos.is_finite() or not vel.is_finite() or not ang_vel.is_finite():
+		push_error("SubmarinePhysics: NaN detected in submarine state! Resetting to safe values.")
+		# Reset to safe state
+		submarine_body.global_position = Vector3(0, 0, 0) if not pos.is_finite() else pos
+		submarine_body.linear_velocity = Vector3.ZERO if not vel.is_finite() else vel
+		submarine_body.angular_velocity = Vector3.ZERO if not ang_vel.is_finite() else ang_vel
+		submarine_body.global_transform = Transform3D(Basis(), submarine_body.global_position)
+		return  # Skip this frame to allow reset
 	
 	# Apply all physics systems
 	apply_buoyancy(delta)
