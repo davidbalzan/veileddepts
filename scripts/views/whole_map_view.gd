@@ -10,10 +10,17 @@ func _ready() -> void:
 	# Call parent _ready but we'll override some parameters
 	super._ready()
 	
-	# Load the full world map
+	# Load the full world map with error handling
 	global_map_texture = load("res://src_assets/World_elevation_map.png")
 	if global_map_texture:
-		print("WholeMapView: Loaded global map texture (%dx%d)" % [global_map_texture.get_width(), global_map_texture.get_height()])
+		var tex_size = Vector2i(global_map_texture.get_width(), global_map_texture.get_height())
+		print("WholeMapView: Loaded global map texture (%dx%d)" % [tex_size.x, tex_size.y])
+		
+		# Check if texture is too large for the device
+		if tex_size.x > 16384 or tex_size.y > 16384:
+			push_warning("WholeMapView: Texture is very large (%dx%d), may cause rendering issues" % [tex_size.x, tex_size.y])
+	else:
+		push_error("WholeMapView: Failed to load global map texture")
 	
 	# Whole map defaults
 	map_zoom = 1.0 # Use 1.0 zoom to see the full world map
@@ -95,7 +102,14 @@ func _on_map_canvas_draw() -> void:
 	
 	# Draw the global map texture to fill the canvas
 	if global_map_texture:
-		map_canvas.draw_texture_rect(global_map_texture, canvas_rect, false, Color(1, 1, 1, 0.8))
+		# Check if texture is valid before drawing
+		if global_map_texture.get_width() > 0 and global_map_texture.get_height() > 0:
+			map_canvas.draw_texture_rect(global_map_texture, canvas_rect, false, Color(1, 1, 1, 0.8))
+		else:
+			# Texture is invalid
+			var font_size = 32
+			var msg = "INVALID GLOBAL MAP TEXTURE\n(Texture dimensions: %dx%d)" % [global_map_texture.get_width(), global_map_texture.get_height()]
+			map_canvas.draw_string(ThemeDB.fallback_font, canvas_rect.get_center(), msg, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.RED)
 	else:
 		# Fallback if texture missing
 		var font_size = 32
@@ -155,14 +169,6 @@ func _draw_submarine_icon_global() -> void:
 func _process(_delta: float) -> void:
 	if visible and map_canvas:
 		map_canvas.queue_redraw()
-
-# Handle visibility changes to ensure proper redraw
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_VISIBILITY_CHANGED:
-		if visible and map_canvas:
-			# Force immediate redraw when becoming visible
-			await get_tree().process_frame
-			map_canvas.queue_redraw()
 
 func _input(event: InputEvent) -> void:
 	if not visible:
