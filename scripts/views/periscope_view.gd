@@ -328,16 +328,9 @@ func _draw_bearing_arc() -> void:
 	var height = 60.0
 	var center_x = width / 2.0
 	
-	# Get submarine body rotation
-	var main_node = get_parent()
-	var submarine_body = main_node.get_node_or_null("SubmarineModel")
-	var submarine_body_heading = rad_to_deg(submarine_body.rotation.y) if submarine_body else 0.0
-	
-	# Normalize to 0-360
-	while submarine_body_heading < 0:
-		submarine_body_heading += 360.0
-	while submarine_body_heading >= 360:
-		submarine_body_heading -= 360.0
+	# Get submarine heading using unified coordinate system
+	# Use simulation_state.submarine_heading which is calculated consistently
+	var submarine_body_heading = simulation_state.submarine_heading if simulation_state else 0.0
 	
 	# Get absolute bearing (submarine body heading + periscope rotation)
 	var absolute_bearing = submarine_body_heading + periscope_rotation
@@ -355,8 +348,10 @@ func _draw_bearing_arc() -> void:
 		var label = labels[i]
 		
 		# Calculate position relative to current bearing
-		# FIXED: Invert the calculation - if we're looking at 281°, North (0°) is to our right
-		var relative_bearing = absolute_bearing - bearing
+		# If looking North (0°), West (270°) should be on LEFT, East (90°) on RIGHT
+		# relative_bearing = bearing - absolute_bearing
+		# Positive = to the right, Negative = to the left
+		var relative_bearing = bearing - absolute_bearing
 		while relative_bearing < -180:
 			relative_bearing += 360
 		while relative_bearing > 180:
@@ -380,6 +375,29 @@ func _draw_bearing_arc() -> void:
 	
 	# Draw center line (current bearing)
 	control.draw_line(Vector2(center_x, 0), Vector2(center_x, height), Color(1, 0, 0, 0.9), 3.0)
+	
+	# Draw target heading marker (yellow) if different from current
+	if simulation_state:
+		var target_heading = simulation_state.target_heading
+		var relative_target = target_heading - absolute_bearing
+		while relative_target < -180:
+			relative_target += 360
+		while relative_target > 180:
+			relative_target -= 360
+		
+		# Only draw if within view range
+		if abs(relative_target) <= 90:
+			var target_x = center_x + (relative_target / 90.0) * (width / 2.0)
+			# Draw yellow tick for target heading
+			control.draw_line(Vector2(target_x, 0), Vector2(target_x, height), Color(1, 1, 0, 0.8), 4.0)
+			# Draw small triangle at top
+			var tri_size = 8.0
+			var tri_points = PackedVector2Array([
+				Vector2(target_x, 0),
+				Vector2(target_x - tri_size/2, tri_size),
+				Vector2(target_x + tri_size/2, tri_size)
+			])
+			control.draw_colored_polygon(tri_points, Color(1, 1, 0, 0.8))
 
 
 ## Draw submarine orientation indicator
@@ -482,16 +500,8 @@ func _update_hud() -> void:
 	if not visible:
 		return
 	
-	# Get submarine body rotation
-	var main_node = get_parent()
-	var submarine_body = main_node.get_node_or_null("SubmarineModel")
-	var submarine_body_heading = rad_to_deg(submarine_body.rotation.y) if submarine_body else 0.0
-	
-	# Normalize to 0-360
-	while submarine_body_heading < 0:
-		submarine_body_heading += 360.0
-	while submarine_body_heading >= 360:
-		submarine_body_heading -= 360.0
+	# Get submarine heading using unified coordinate system
+	var submarine_body_heading = simulation_state.submarine_heading if simulation_state else 0.0
 	
 	# Update bearing label (body heading + periscope rotation)
 	var absolute_bearing = submarine_body_heading + periscope_rotation

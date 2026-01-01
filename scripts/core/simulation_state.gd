@@ -56,14 +56,41 @@ func update_submarine_command(waypoint: Vector3, speed: float, depth: float) -> 
 	# Update TARGET heading to point toward waypoint
 	var delta = waypoint - submarine_position
 	if delta.length() > 0.1:  # Only update if waypoint is not at current position
-		# Calculate heading from position to waypoint
+		# Calculate basic heading from position to waypoint
 		# atan2(x, -z) gives angle where 0 is north (-Z), 90 is east (+X)
 		var heading_rad = atan2(delta.x, -delta.z)
-		target_heading = rad_to_deg(heading_rad)
+		var basic_heading = rad_to_deg(heading_rad)
 		
 		# Normalize to 0-360 range
-		if target_heading < 0:
-			target_heading += 360.0
+		if basic_heading < 0:
+			basic_heading += 360.0
+		
+		# Calculate lead-ahead for turning at current speed
+		var distance_to_waypoint = delta.length()
+		var current_speed_2d = Vector2(submarine_velocity.x, submarine_velocity.z).length()
+		
+		# Estimate turning radius based on current speed (simplified)
+		var turning_radius = 50.0  # Base turning radius in meters
+		if current_speed_2d > 1.0:
+			turning_radius = current_speed_2d * 8.0  # Rough approximation
+		
+		# If we're close to the waypoint and moving fast, start turning early
+		var lead_ahead_distance = min(turning_radius, distance_to_waypoint * 0.5)
+		
+		if distance_to_waypoint < lead_ahead_distance * 2.0 and current_speed_2d > 2.0:
+			# We're approaching the waypoint - calculate lead-ahead heading
+			var lead_ahead_point = waypoint + delta.normalized() * lead_ahead_distance
+			var lead_delta = lead_ahead_point - submarine_position
+			if lead_delta.length() > 0.1:
+				var lead_heading_rad = atan2(lead_delta.x, -lead_delta.z)
+				target_heading = rad_to_deg(lead_heading_rad)
+				if target_heading < 0:
+					target_heading += 360.0
+			else:
+				target_heading = basic_heading
+		else:
+			# Normal navigation - point directly at waypoint
+			target_heading = basic_heading
 
 
 ## Set target speed directly without changing waypoint or heading

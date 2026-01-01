@@ -76,6 +76,12 @@ func _setup_ocean() -> void:
 	initialized = true
 	print("OceanRenderer: Initialized")
 
+func _exit_tree() -> void:
+	# Clean up GPU resources to prevent RID leaks
+	if ocean:
+		ocean.cleanup()
+	initialized = false
+
 func _process(delta: float) -> void:
 	if initialized and ocean and ocean.initialized:
 		ocean.simulate(delta)

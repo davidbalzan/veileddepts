@@ -255,8 +255,13 @@ func update_search(delta: float) -> void:
 	var distance_to_submarine = global_position.distance_to(submarine_position)
 	
 	if distance_to_submarine <= detection_range:
-		last_known_target_position = submarine_position
-		navigation_agent.target_position = last_known_target_position
+		var distance_to_last_known = last_known_target_position.distance_to(submarine_position)
+		
+		# Only update navigation if submarine moved significantly (reduces path recalculation)
+		if distance_to_last_known > 20.0:  # 20m threshold
+			last_known_target_position = submarine_position
+			navigation_agent.target_position = last_known_target_position
+		
 		# Reset search timer since we still have contact
 		search_timer = 0.0
 
@@ -314,8 +319,10 @@ func _move_toward_target(delta: float) -> void:
 	global_position += velocity
 	
 	# Rotate to face movement direction
+	# Unified coordinate system: atan2(x, -z) where -Z is North
+	# But for rotation.y in Godot, we need the inverse since positive Y rotation is counter-clockwise
 	if direction.length() > 0.01:
-		var target_rotation = atan2(direction.x, direction.z)
+		var target_rotation = atan2(-direction.x, -direction.z)
 		rotation.y = lerp_angle(rotation.y, target_rotation, 5.0 * delta)
 
 

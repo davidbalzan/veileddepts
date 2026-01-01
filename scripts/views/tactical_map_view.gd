@@ -246,8 +246,22 @@ func _draw_compass() -> void:
 	var arrow_right = arrow_end + Vector2(sin(heading_rad + 2.5), -cos(heading_rad + 2.5)) * arrow_size
 	control.draw_colored_polygon(PackedVector2Array([arrow_end, arrow_left, arrow_right]), Color(0, 1, 0, 0.9))
 	
-	# Draw heading text below compass - show current heading
-	var heading_text = "%03d°" % int(simulation_state.submarine_heading)
+	# Draw target heading marker (yellow tick) - shows where sub is TURNING to
+	var target_heading_rad = deg_to_rad(simulation_state.target_heading)
+	var target_vec = Vector2(sin(target_heading_rad), -cos(target_heading_rad))
+	var target_tick_start = center + target_vec * (radius - 12)
+	var target_tick_end = center + target_vec * (radius + 5)
+	control.draw_line(target_tick_start, target_tick_end, Color(1, 1, 0, 0.9), 4.0)
+	
+	# Draw small triangle at target heading
+	var target_marker_pos = center + target_vec * (radius + 8)
+	var target_marker_size = 5.0
+	var target_left = target_marker_pos + Vector2(sin(target_heading_rad - 2.0), -cos(target_heading_rad - 2.0)) * target_marker_size
+	var target_right = target_marker_pos + Vector2(sin(target_heading_rad + 2.0), -cos(target_heading_rad + 2.0)) * target_marker_size
+	control.draw_colored_polygon(PackedVector2Array([target_marker_pos, target_left, target_right]), Color(1, 1, 0, 0.9))
+	
+	# Draw heading text below compass - show current and target heading
+	var heading_text = "HDG: %03d° → %03d°" % [int(simulation_state.submarine_heading), int(simulation_state.target_heading)]
 	var heading_text_size = font.get_string_size(heading_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 	control.draw_string(font, Vector2(center.x - heading_text_size.x / 2, size - 5), heading_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color(0, 1, 0, 1))
 

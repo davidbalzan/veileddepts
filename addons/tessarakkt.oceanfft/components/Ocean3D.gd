@@ -246,6 +246,63 @@ var _domain_warp_image:Image
 var _rng := RandomNumberGenerator.new()
 
 
+## Clean up GPU resources to prevent RID leaks
+func cleanup() -> void:
+	if not _rd:
+		return
+
+	# Free shaders and pipelines
+	if _initial_spectrum_shader.is_valid():
+		_rd.free_rid(_initial_spectrum_shader)
+	if _initial_spectrum_pipeline.is_valid():
+		_rd.free_rid(_initial_spectrum_pipeline)
+	if _phase_shader.is_valid():
+		_rd.free_rid(_phase_shader)
+	if _phase_pipeline.is_valid():
+		_rd.free_rid(_phase_pipeline)
+	if _spectrum_shader.is_valid():
+		_rd.free_rid(_spectrum_shader)
+	if _spectrum_pipeline.is_valid():
+		_rd.free_rid(_spectrum_pipeline)
+	if _fft_horizontal_shader.is_valid():
+		_rd.free_rid(_fft_horizontal_shader)
+	if _fft_horizontal_pipeline.is_valid():
+		_rd.free_rid(_fft_horizontal_pipeline)
+	if _fft_vertical_shader.is_valid():
+		_rd.free_rid(_fft_vertical_shader)
+	if _fft_vertical_pipeline.is_valid():
+		_rd.free_rid(_fft_vertical_pipeline)
+
+	# Free storage buffers
+	if _phase_settings_buffer.is_valid():
+		_rd.free_rid(_phase_settings_buffer)
+	if _spectrum_settings_buffer.is_valid():
+		_rd.free_rid(_spectrum_settings_buffer)
+	if _fft_settings_buffer.is_valid():
+		_rd.free_rid(_fft_settings_buffer)
+	if _sub_pong_tex.is_valid():
+		_rd.free_rid(_sub_pong_tex)
+
+	# Free cascade arrays
+	for rid in _initial_spectrum_settings_buffer_cascade:
+		if rid.is_valid():
+			_rd.free_rid(rid)
+	for rid in _initial_spectrum_tex_cascade:
+		if rid.is_valid():
+			_rd.free_rid(rid)
+	for rid in _ping_tex_cascade:
+		if rid.is_valid():
+			_rd.free_rid(rid)
+	for rid in _pong_tex_cascade:
+		if rid.is_valid():
+			_rd.free_rid(rid)
+	for rid in _spectrum_tex_cascade:
+		if rid.is_valid():
+			_rd.free_rid(rid)
+
+	initialized = false
+
+
 ## Initialize the simulation
 func initialize_simulation() -> void:
 	_rng.randomize()

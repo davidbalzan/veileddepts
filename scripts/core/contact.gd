@@ -41,9 +41,9 @@ var _cache_valid: bool = false
 ## Returns bearing in degrees (0-360, where 0 is north, 90 is east)
 func calculate_bearing(observer_position: Vector3) -> float:
 	var delta = position - observer_position
-	# Use atan2 with z (north-south) and x (east-west)
-	# Godot's coordinate system: +X is right, +Z is forward (north)
-	var bearing_rad = atan2(delta.x, delta.z)
+	# Unified coordinate system: atan2(x, -z) where -Z is North, +X is East
+	# This gives: North=0°, East=90°, South=180°, West=270°
+	var bearing_rad = atan2(delta.x, -delta.z)
 	var bearing_deg = rad_to_deg(bearing_rad)
 	
 	# Normalize to 0-360 range
@@ -84,8 +84,9 @@ func update_bearing_and_range(observer_position: Vector3) -> void:
 	# Calculate range
 	_cached_range = delta.length()
 	
-	# Calculate bearing
-	var bearing_rad = atan2(delta.x, delta.z)
+	# Calculate bearing using unified coordinate system
+	# atan2(x, -z) where -Z is North, +X is East
+	var bearing_rad = atan2(delta.x, -delta.z)
 	var bearing_deg = rad_to_deg(bearing_rad)
 	
 	# Normalize to 0-360 range
