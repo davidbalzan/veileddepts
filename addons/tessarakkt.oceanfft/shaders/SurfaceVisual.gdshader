@@ -109,9 +109,10 @@ uniform sampler2D screen_texture : hint_screen_texture, filter_linear_mipmap;
 
 // Instance Uniforms
 /******************************************************************************/
-instance uniform float patch_size = 512.0;
-instance uniform float min_lod_morph_distance;
-instance uniform float max_lod_morph_distance;
+// Changed from 'instance uniform' to regular 'uniform' to prevent shader allocation errors
+uniform float patch_size = 512.0;
+uniform float min_lod_morph_distance;
+uniform float max_lod_morph_distance;
 
 
 // Varyings
