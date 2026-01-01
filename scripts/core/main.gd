@@ -134,7 +134,7 @@ func _create_submarine_physics() -> void:
 
 ## Change the submarine class at runtime
 ## Available classes: Los_Angeles_Class, Ohio_Class, Virginia_Class, Seawolf_Class, Default
-func change_submarine_class(class_name: String) -> bool:
+func change_submarine_class(submarine_class: String) -> bool:
 	if not submarine_physics:
 		push_error("Submarine physics not initialized")
 		return false
@@ -143,15 +143,15 @@ func change_submarine_class(class_name: String) -> bool:
 		push_error("Current physics system does not support submarine classes")
 		return false
 	
-	var success = submarine_physics.load_submarine_class(class_name)
+	var success = submarine_physics.load_submarine_class(submarine_class)
 	if success:
-		print("Changed submarine class to: ", class_name)
+		print("Changed submarine class to: ", submarine_class)
 		# Reset velocity to prevent physics issues when mass changes
 		if submarine_body:
 			submarine_body.linear_velocity = Vector3.ZERO
 			submarine_body.angular_velocity = Vector3.ZERO
 	else:
-		push_error("Failed to load submarine class: ", class_name)
+		push_error("Failed to load submarine class: ", submarine_class)
 	
 	return success
 

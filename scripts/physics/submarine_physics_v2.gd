@@ -355,7 +355,7 @@ func update_physics(delta: float) -> void:
 	var dive_plane_torque = dive_plane_system.calculate_dive_plane_torque(
 		depth,
 		target_depth,
-		vertical_velocity,
+		-vertical_velocity,  # Negate: Godot Y+ is up, dive planes expect positive = descending
 		abs(forward_speed),
 		rad_to_deg(current_pitch)
 	)
@@ -366,11 +366,12 @@ func update_physics(delta: float) -> void:
 	var ballast_force = ballast_system.calculate_ballast_force(
 		depth,
 		target_depth,
-		vertical_velocity,
+		-vertical_velocity,  # Negate: Godot Y+ is up, ballast expects positive = descending
 		delta
 	)
 	if is_finite(ballast_force):
-		submarine_body.apply_central_force(Vector3(0, -ballast_force, 0))  # Negative because ballast is positive down
+		# Ballast force is positive down, but Godot Y is positive up, so negate
+		submarine_body.apply_central_force(Vector3(0, -ballast_force, 0))
 	
 	# Step 9: Apply sideways velocity elimination - Requirement 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
 	_apply_sideways_velocity_elimination(forward_dir)
