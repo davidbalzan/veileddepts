@@ -4,7 +4,7 @@ extends Node
 ## This script initializes all core systems and manages the main game loop.
 
 # Preload physics class
-const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics.gd")
+const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
 
 # References to core systems
 @onready var view_manager: Node = $ViewManager
@@ -124,7 +124,47 @@ func _create_submarine_physics() -> void:
 	# Initialize with references to required systems
 	submarine_physics.initialize(submarine_body, ocean_renderer, simulation_state)
 	
-	print("Submarine physics created and initialized")
+	# Load default submarine class if using SubmarinePhysicsV2
+	if submarine_physics.has_method("load_submarine_class"):
+		submarine_physics.load_submarine_class("Default")
+		print("Submarine physics created with Default class")
+	else:
+		print("Submarine physics created and initialized")
+
+
+## Change the submarine class at runtime
+## Available classes: Los_Angeles_Class, Ohio_Class, Virginia_Class, Seawolf_Class, Default
+func change_submarine_class(class_name: String) -> bool:
+	if not submarine_physics:
+		push_error("Submarine physics not initialized")
+		return false
+	
+	if not submarine_physics.has_method("load_submarine_class"):
+		push_error("Current physics system does not support submarine classes")
+		return false
+	
+	var success = submarine_physics.load_submarine_class(class_name)
+	if success:
+		print("Changed submarine class to: ", class_name)
+		# Reset velocity to prevent physics issues when mass changes
+		if submarine_body:
+			submarine_body.linear_velocity = Vector3.ZERO
+			submarine_body.angular_velocity = Vector3.ZERO
+	else:
+		push_error("Failed to load submarine class: ", class_name)
+	
+	return success
+
+
+## Get list of available submarine classes
+func get_available_submarine_classes() -> Array[String]:
+	if not submarine_physics:
+		return []
+	
+	if submarine_physics.has_method("get_available_classes"):
+		return submarine_physics.get_available_classes()
+	
+	return []
 
 
 func _setup_ai_system() -> void:

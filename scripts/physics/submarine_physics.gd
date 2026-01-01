@@ -563,57 +563,58 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 	# In Godot: positive Y torque = counter-clockwise rotation (left turn)
 	# Navigation: positive heading error = need to turn right (clockwise)
 	# So we NEGATE the torque to get correct turn direction
-	var torque_coefficient = 8000000.0  # Reduced from 50M to 8M for reasonable turning
+	var torque_coefficient = 2000000.0  # Reduced from 8M to 2M for much slower, realistic turning
 	var steering_torque = -speed_factor * rudder_angle * torque_coefficient  # NEGATED
 	
 	# Apply torque directly
 	var torque_vector = Vector3(0, steering_torque, 0)
 	submarine_body.apply_torque(torque_vector)
 	
-	# Debug output for low-speed steering attempts
-	if abs(heading_error_deg) > 5.0 and water_speed < min_steering_speed:
+	# Debug output for low-speed steering attempts (less frequent)
+	if abs(heading_error_deg) > 10.0 and water_speed < min_steering_speed:
 		print("Low-speed steering: speed=%.2f m/s, limited effectiveness" % water_speed)
 	
 	# Forward stabilizers - resist unwanted rotation and limit turn rate
 	var angular_velocity = submarine_body.angular_velocity.y
 	
-	# Realistic maximum turn rate for a large submarine (much slower than 30°/s)
-	var max_turn_rate = deg_to_rad(15.0)  # 15°/s max turn rate (more realistic)
+	# Realistic maximum turn rate for a large submarine
+	var max_turn_rate = deg_to_rad(5.0)  # 5°/s max turn rate (much more realistic for large submarine)
 	
 	if abs(angular_velocity) > max_turn_rate:
 		# Apply strong damping when exceeding maximum turn rate
 		var excess_rotation = abs(angular_velocity) - max_turn_rate
-		var damping_torque = -sign(angular_velocity) * excess_rotation * 30000000.0  # Increased damping
+		var damping_torque = -sign(angular_velocity) * excess_rotation * 50000000.0  # Strong damping
 		submarine_body.apply_torque(Vector3(0, damping_torque, 0))
 	elif abs(angular_velocity) > 0.01:
 		# Apply light damping for stability even at normal turn rates
-		var stability_damping = -angular_velocity * 5000000.0  # Light damping for stability
+		var stability_damping = -angular_velocity * 8000000.0  # Increased damping for stability
 		submarine_body.apply_torque(Vector3(0, stability_damping, 0))
 	
-	# Anti-slip system - eliminate sideways velocity
-	# Calculate current heading from forward direction (consistent with other calculations)
-	var anti_slip_forward_dir = -submarine_body.global_transform.basis.z
-	var current_heading_rad = atan2(anti_slip_forward_dir.x, -anti_slip_forward_dir.z)
-	
+	# Anti-slip system - eliminate sideways velocity using direct velocity manipulation
+	# This is more stable than applying forces that fight each other
 	var velocity_2d = Vector2(submarine_body.linear_velocity.x, submarine_body.linear_velocity.z)
+	var current_heading_rad = deg_to_rad(current_heading)
 	var forward_2d = Vector2(sin(current_heading_rad), -cos(current_heading_rad))
 	var right_2d = Vector2(forward_2d.y, -forward_2d.x)
 	var sideways_velocity = velocity_2d.dot(right_2d)
 	
-	# Apply anti-slip force even for small sideways velocities
-	if abs(sideways_velocity) > 0.1:  # Increased threshold to reduce constant corrections
-		# Strong but not excessive anti-slip force
-		# Balance between eliminating sideways motion and system stability
-		var anti_slip_force = -sideways_velocity * mid_stabilizer_effectiveness * 2.0  # Reduced from 5.0 to 2.0
-		var sideways_direction = Vector3(right_2d.x, 0, right_2d.y)
-		var anti_slip_vector = sideways_direction * anti_slip_force
+	# Apply direct velocity correction for significant sideways movement
+	if abs(sideways_velocity) > 0.5:  # Only correct significant sideways drift
+		# Calculate forward speed to preserve
+		var forward_speed = velocity_2d.dot(forward_2d)
 		
-		# Apply at center of mass (no torque, just translation correction)
-		submarine_body.apply_central_force(anti_slip_vector)
+		# Gradually reduce sideways component while preserving forward motion
+		var sideways_reduction = 0.8  # Remove 80% of sideways velocity per frame
+		var corrected_sideways = sideways_velocity * (1.0 - sideways_reduction)
 		
-		# Debug output for sideways movement (less frequent)
-		if abs(sideways_velocity) > 2.0:  # Only warn for very significant sideways movement
-			print("Anti-slip: sideways velocity %.2f m/s, applying force %.0f N" % [sideways_velocity, anti_slip_force])
+		# Reconstruct velocity with reduced sideways component
+		var corrected_velocity_2d = forward_2d * forward_speed + right_2d * corrected_sideways
+		submarine_body.linear_velocity.x = corrected_velocity_2d.x
+		submarine_body.linear_velocity.z = corrected_velocity_2d.y
+		
+		# Debug output only for very significant sideways movement
+		if abs(sideways_velocity) > 3.0:
+			print("Anti-slip: correcting sideways velocity %.2f m/s" % sideways_velocity)
 
 ## Apply depth control forces to reach target depth
 ## Validates: Requirements 11.1
@@ -781,7 +782,9 @@ func _clamp_velocity() -> void:
 	var max_allowed_speed = max_speed * 1.1  # 10% buffer
 	if speed > max_allowed_speed:
 		submarine_body.linear_velocity = velocity.normalized() * max_allowed_speed
-		push_warning("SubmarinePhysics: Velocity clamped from %.1f to %.1f m/s" % [speed, max_allowed_speed])
+		# Only warn for significant speed violations to reduce spam
+		if speed > max_allowed_speed * 1.2:
+			push_warning("SubmarinePhysics: Velocity clamped from %.1f to %.1f m/s" % [speed, max_allowed_speed])
 
 ## Enforce map boundaries to prevent submarine from running off the map
 func _enforce_map_boundaries() -> void:
@@ -825,15 +828,15 @@ func _enforce_map_boundaries() -> void:
 	if boundary_changed:
 		push_warning("SubmarinePhysics: Submarine hit map boundary at position (%.1f, %.1f, %.1f)" % [pos.x, pos.y, pos.z])
 ## Align velocity direction with submarine heading to prevent sideways movement
-func _align_velocity_with_heading(delta: float) -> void:
+func _align_velocity_with_heading(_delta: float) -> void:
 	if not submarine_body:
 		return
 	
 	var velocity = submarine_body.linear_velocity
 	var speed = velocity.length()
 	
-	# Only apply alignment if submarine is moving
-	if speed < 0.1:
+	# Only apply alignment if submarine is moving at reasonable speed
+	if speed < 1.0:
 		return
 	
 	# Get submarine's forward direction
@@ -845,32 +848,25 @@ func _align_velocity_with_heading(delta: float) -> void:
 	# Calculate alignment between velocity and heading
 	var alignment = velocity_direction.dot(forward_direction)
 	
-	# More aggressive alignment - allow less sideways drift
-	var alignment_threshold = 0.95  # cos(~18°) - much stricter than before
+	# Only correct very poor alignment to avoid fighting with other systems
+	var alignment_threshold = 0.7  # cos(~45°) - only correct major misalignment
 	if alignment > alignment_threshold:
 		return
 	
-	# Don't apply velocity alignment if speed is being clamped (prevents fighting with speed limiter)
-	if speed > max_speed * 1.05:  # If speed is significantly over max, let velocity clamping handle it
+	# Don't apply velocity alignment if speed is being clamped
+	if speed > max_speed * 1.05:
 		return
 	
-	# Calculate the desired velocity (aligned with heading)
-	var desired_velocity = forward_direction * speed
+	# Direct velocity correction for major misalignment
+	# This is more stable than applying forces
+	var horizontal_speed = Vector2(velocity.x, velocity.z).length()
+	var desired_horizontal = Vector2(forward_direction.x, forward_direction.z).normalized() * horizontal_speed
 	
-	# Much gentler alignment for stability - the anti-slip system handles most of this
-	var alignment_strength = 1.0  # Reduced from 5.0 - let anti-slip do the heavy lifting
-	var velocity_correction = (desired_velocity - velocity) * alignment_strength * delta
+	# Gradually align velocity direction (preserve vertical component)
+	var alignment_rate = 0.1  # 10% correction per frame - very gentle
+	submarine_body.linear_velocity.x = lerp(velocity.x, desired_horizontal.x, alignment_rate)
+	submarine_body.linear_velocity.z = lerp(velocity.z, desired_horizontal.y, alignment_rate)
 	
-	# Apply velocity correction as a force
-	var correction_force = velocity_correction * submarine_body.mass / delta
-	
-	# Reduce max correction force significantly to prevent instability
-	var max_correction_force = propulsion_force_max * 0.1  # Reduced from 50% to 10%
-	if correction_force.length() > max_correction_force:
-		correction_force = correction_force.normalized() * max_correction_force
-	
-	submarine_body.apply_central_force(correction_force)
-	
-	# Debug output for significant misalignment (less frequent)
-	if alignment < 0.7:  # Only warn for very poor alignment
-		print("Velocity alignment: alignment %.3f, correction force %.0f N" % [alignment, correction_force.length()])
+	# Debug output only for severe misalignment
+	if alignment < 0.3:
+		print("Velocity alignment: severe misalignment %.3f, correcting" % alignment)
