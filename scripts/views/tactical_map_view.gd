@@ -511,7 +511,10 @@ func _on_map_canvas_draw() -> void:
 	if not visible or not simulation_state:
 		return
 	
-	# Draw terrain background first
+	# Draw grid first (behind everything)
+	_draw_grid()
+	
+	# Draw terrain background
 	if show_terrain:
 		_draw_terrain()
 	
@@ -523,6 +526,9 @@ func _on_map_canvas_draw() -> void:
 	
 	# Draw contact icons and bearing arcs
 	_draw_contacts()
+	
+	# Draw scale indicator (on top)
+	_draw_scale_indicator()
 
 
 ## Generate terrain texture from heightmap
@@ -889,3 +895,122 @@ func _draw_contacts() -> void:
 		
 		for i in range(segments):
 			map_canvas.draw_line(arc_points[i], arc_points[i + 1], Color.YELLOW, 2.0)
+
+## Draw coordinate grid
+func _draw_grid() -> void:
+	if not map_canvas:
+		return
+	
+	var canvas_size = map_canvas.size
+	if canvas_size.x <= 0 or canvas_size.y <= 0:
+		return
+	
+	# Calculate grid spacing based on zoom level
+	# At zoom 1.0, show 100m grid lines
+	# At zoom 0.5, show 200m grid lines, etc.
+	var base_grid_spacing = 100.0  # meters
+	var grid_spacing_world = base_grid_spacing / map_zoom
+	
+	# Convert to screen space
+	var grid_spacing_screen = grid_spacing_world * map_scale * map_zoom
+	
+	# Don't draw grid if lines would be too close together
+	if grid_spacing_screen < 20:
+		return
+	
+	# Get world bounds visible on screen
+	var screen_center = canvas_size / 2
+	var world_center = screen_to_world(screen_center)
+	var world_half_width = canvas_size.x / (2 * map_scale * map_zoom)
+	var world_half_height = canvas_size.y / (2 * map_scale * map_zoom)
+	
+	# Calculate grid line positions
+	var grid_color = Color(0.3, 0.3, 0.3, 0.5)  # Dark gray, semi-transparent
+	var major_grid_color = Color(0.4, 0.4, 0.4, 0.7)  # Slightly brighter for major lines
+	
+	# Vertical grid lines (X coordinates)
+	var start_x = floor((world_center.x - world_half_width) / grid_spacing_world) * grid_spacing_world
+	var end_x = ceil((world_center.x + world_half_width) / grid_spacing_world) * grid_spacing_world
+	
+	var x = start_x
+	while x <= end_x:
+		var screen_x = world_to_screen(Vector3(x, 0, 0)).x
+		if screen_x >= 0 and screen_x <= canvas_size.x:
+			# Major grid lines every 500m
+			var is_major = int(x) % 500 == 0
+			var color = major_grid_color if is_major else grid_color
+			var width = 2.0 if is_major else 1.0
+			map_canvas.draw_line(Vector2(screen_x, 0), Vector2(screen_x, canvas_size.y), color, width)
+		x += grid_spacing_world
+	
+	# Horizontal grid lines (Z coordinates)
+	var start_z = floor((world_center.z - world_half_height) / grid_spacing_world) * grid_spacing_world
+	var end_z = ceil((world_center.z + world_half_height) / grid_spacing_world) * grid_spacing_world
+	
+	var z = start_z
+	while z <= end_z:
+		var screen_y = world_to_screen(Vector3(0, 0, z)).y
+		if screen_y >= 0 and screen_y <= canvas_size.y:
+			# Major grid lines every 500m
+			var is_major = int(z) % 500 == 0
+			var color = major_grid_color if is_major else grid_color
+			var width = 2.0 if is_major else 1.0
+			map_canvas.draw_line(Vector2(0, screen_y), Vector2(canvas_size.x, screen_y), color, width)
+		z += grid_spacing_world
+
+## Draw scale indicator
+func _draw_scale_indicator() -> void:
+	if not map_canvas:
+		return
+	
+	var canvas_size = map_canvas.size
+	if canvas_size.x <= 0 or canvas_size.y <= 0:
+		return
+	
+	# Position scale in bottom-right corner
+	var scale_pos = Vector2(canvas_size.x - 200, canvas_size.y - 60)
+	var scale_width = 150.0
+	var scale_height = 40.0
+	
+	# Draw background
+	var bg_rect = Rect2(scale_pos, Vector2(scale_width, scale_height))
+	map_canvas.draw_rect(bg_rect, Color(0, 0, 0, 0.7))
+	map_canvas.draw_rect(bg_rect, Color(0.5, 0.5, 0.5, 0.8), false, 2.0)
+	
+	# Calculate scale bar length in world units
+	var scale_bar_screen_length = 100.0  # pixels
+	var scale_bar_world_length = scale_bar_screen_length / (map_scale * map_zoom)
+	
+	# Round to nice numbers
+	var nice_lengths = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+	var best_length = nice_lengths[0]
+	for length in nice_lengths:
+		if length <= scale_bar_world_length:
+			best_length = length
+		else:
+			break
+	
+	# Recalculate screen length for the nice world length
+	var actual_screen_length = best_length * map_scale * map_zoom
+	
+	# Draw scale bar
+	var bar_start = scale_pos + Vector2(10, scale_height - 20)
+	var bar_end = bar_start + Vector2(actual_screen_length, 0)
+	
+	# Draw the bar
+	map_canvas.draw_line(bar_start, bar_end, Color.WHITE, 3.0)
+	map_canvas.draw_line(bar_start, bar_start + Vector2(0, -5), Color.WHITE, 2.0)
+	map_canvas.draw_line(bar_end, bar_end + Vector2(0, -5), Color.WHITE, 2.0)
+	
+	# Draw scale text
+	var scale_text = "%d m" % best_length if best_length < 1000 else "%.1f km" % (best_length / 1000.0)
+	var font = ThemeDB.fallback_font
+	var font_size = 14
+	var text_size = font.get_string_size(scale_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var text_pos = bar_start + Vector2(actual_screen_length / 2 - text_size.x / 2, -8)
+	map_canvas.draw_string(font, text_pos, scale_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color.WHITE)
+	
+	# Draw zoom level
+	var zoom_text = "Zoom: %.1fx" % map_zoom
+	var zoom_pos = scale_pos + Vector2(10, 15)
+	map_canvas.draw_string(font, zoom_pos, zoom_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.8, 0.8, 0.8, 1.0))

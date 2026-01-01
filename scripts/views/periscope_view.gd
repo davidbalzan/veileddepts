@@ -414,14 +414,22 @@ func _draw_submarine_indicator() -> void:
 	control.draw_circle(center, radius + 5, Color(0, 0, 0, 0.7))
 	control.draw_arc(center, radius + 5, 0, TAU, 32, Color(0, 1, 0, 0.5), 2.0)
 	
-	# Draw submarine body (always pointing up = submarine's forward)
+	# Draw submarine body rotated to match actual heading
+	# Get submarine heading and convert to screen rotation
+	var submarine_heading = simulation_state.submarine_heading
+	var heading_rad = deg_to_rad(submarine_heading)
+	var heading_dir = Vector2(sin(heading_rad), -cos(heading_rad))  # -cos for up=0°
+	
 	var sub_length = 40.0
 	var sub_width = 12.0
-	var sub_points = PackedVector2Array([
-		center + Vector2(0, -sub_length / 2),  # Bow
-		center + Vector2(-sub_width / 2, sub_length / 2),  # Port stern
-		center + Vector2(sub_width / 2, sub_length / 2)   # Starboard stern
-	])
+	
+	# Calculate submarine triangle points rotated by heading
+	var forward_point = center + heading_dir * (sub_length / 2)
+	var perpendicular = Vector2(heading_dir.y, -heading_dir.x)  # Perpendicular to heading
+	var port_point = center - heading_dir * (sub_length / 2) - perpendicular * (sub_width / 2)
+	var starboard_point = center - heading_dir * (sub_length / 2) + perpendicular * (sub_width / 2)
+	
+	var sub_points = PackedVector2Array([forward_point, port_point, starboard_point])
 	control.draw_colored_polygon(sub_points, Color(0.5, 0.5, 0.5, 0.9))
 	control.draw_polyline(sub_points + PackedVector2Array([sub_points[0]]), Color(0, 1, 0, 0.9), 2.0)
 	
