@@ -81,9 +81,14 @@ func _process(delta: float) -> void:
 		ocean.simulate(delta)
 
 func get_wave_height_3d(world_pos: Vector3) -> float:
-	if not initialized or not ocean or not camera or not ocean.initialized:
+	if not initialized or not ocean or not ocean.initialized:
 		return sea_level
-	var displacement = ocean.get_wave_height(camera, world_pos)
+	# Use the current active camera, not the stored one (which may be stale after view switches)
+	var active_camera = get_viewport().get_camera_3d()
+	if not active_camera:
+		return sea_level
+	# Use all 3 cascades to match the visual shader (CASCADE_COUNT = 3)
+	var displacement = ocean.get_wave_height(active_camera, world_pos, 3, 2)
 	return sea_level + displacement
 
 func is_position_underwater(world_pos: Vector3, buffer: float = 0.5) -> bool:

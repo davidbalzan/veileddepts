@@ -44,6 +44,8 @@ func _ready() -> void:
 	
 	# Set process mode to always process input
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Ensure panel is above lens effects (layer 50)
+	layer = 100
 	
 	print("SubmarineTuningPanel: Ready (Press F5 to toggle)")
 	print("SubmarineTuningPanel: Node path = ", get_path())

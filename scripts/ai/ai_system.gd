@@ -8,7 +8,7 @@ class_name AISystem extends Node
 const AIAgentScript = preload("res://scripts/ai/ai_agent.gd")
 
 ## Array of active AI agents
-var ai_agents: Array = []
+var ai_agents: Array[AIAgent] = []
 
 ## Reference to simulation state for submarine detection
 var simulation_state: SimulationState = null
@@ -45,7 +45,7 @@ func set_submarine_node(submarine: Node3D) -> void:
 
 ## Spawn an air patrol at the specified position with patrol route
 ## Returns the spawned AIAgent
-func spawn_air_patrol(spawn_position: Vector3, patrol_route: Array[Vector3], loop: bool = true):
+func spawn_air_patrol(spawn_position: Vector3, patrol_route: Array[Vector3], loop: bool = true) -> AIAgent:
 	# Create new AI agent
 	var agent = AIAgentScript.new()
 	agent.name = "AIAgent_%d" % _next_agent_id
@@ -132,13 +132,13 @@ func get_agent_count() -> int:
 
 
 ## Get all AI agents
-func get_agents() -> Array:
+func get_agents() -> Array[AIAgent]:
 	return ai_agents
 
 
 ## Spawn a simple patrol pattern around a center point
 ## Creates a circular patrol route with specified radius and number of waypoints
-func spawn_circular_patrol(center: Vector3, radius: float, num_waypoints: int = 4, altitude: float = 200.0):
+func spawn_circular_patrol(center: Vector3, radius: float, num_waypoints: int = 4, altitude: float = 200.0) -> AIAgent:
 	var patrol_route: Array[Vector3] = []
 	
 	# Generate waypoints in a circle
@@ -157,7 +157,7 @@ func spawn_circular_patrol(center: Vector3, radius: float, num_waypoints: int = 
 
 ## Spawn a linear patrol pattern between two points
 ## Creates a back-and-forth patrol route
-func spawn_linear_patrol(start_point: Vector3, end_point: Vector3, altitude: float = 200.0):
+func spawn_linear_patrol(start_point: Vector3, end_point: Vector3, altitude: float = 200.0) -> AIAgent:
 	var patrol_route: Array[Vector3] = []
 	
 	# Set altitude for both points

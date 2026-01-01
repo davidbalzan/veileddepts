@@ -9,4 +9,4 @@ echo "  3 - External View"
 echo "  Tab - Cycle Views"
 echo ""
 
-~/utils/Godot_v4.5.1-stable_linux.x86_64 --path . scenes/main.tscn
+godot --path . scenes/main.tscn

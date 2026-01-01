@@ -98,7 +98,7 @@ func update_camera_position() -> void:
 		
 		# Get submarine body rotation directly
 		var main_node = get_parent()
-		var submarine_body = main_node.get_node_or_null("SubmarineBody")
+		var submarine_body = main_node.get_node_or_null("SubmarineModel")
 		var submarine_body_yaw = submarine_body.rotation.y if submarine_body else 0.0
 		
 		# Convert tilt and rotation to radians
@@ -403,12 +403,6 @@ func _update_debug_vectors() -> void:
 	# Get submarine's ACTUAL forward direction from its transform basis
 	var model_forward = -submarine_body.global_transform.basis.z  # Should be same as thrust_direction
 	
-	# DEBUG: Verify they match
-	print("ARROW: thrust=(%.3f,%.3f,%.3f) model=(%.3f,%.3f,%.3f) body_rot.y=%.3f°" % [
-		thrust_direction.x, thrust_direction.y, thrust_direction.z,
-		model_forward.x, model_forward.y, model_forward.z,
-		rad_to_deg(submarine_body.rotation.y)
-	])
 	
 	# Get target heading direction
 	var target_heading_rad = deg_to_rad(simulation_state.target_heading)

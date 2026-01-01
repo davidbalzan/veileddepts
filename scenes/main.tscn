@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://b8qvxj3yvwxqy"]
+[gd_scene load_steps=21 format=3 uid="uid://b8qvxj3yvwxqy"]
 
 [ext_resource type="Script" uid="uid://ci1os4r75yo66" path="res://scripts/core/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://bxpqklmqxolv" path="res://scripts/core/view_manager.gd" id="2_view_manager"]
@@ -23,6 +23,10 @@
 background_mode = 1
 ambient_light_source = 2
 ambient_light_energy = 0.5
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_submarine"]
+radius = 1.5
+height = 20.0
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -99,6 +103,8 @@ axis_lock_angular_x = true
 axis_lock_angular_z = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="SubmarineModel"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+shape = SubResource("CapsuleShape3D_submarine")
 
 [node name="Hull" type="CSGCylinder3D" parent="SubmarineModel"]
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)

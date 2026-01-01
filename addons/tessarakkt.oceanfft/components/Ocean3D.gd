@@ -369,7 +369,7 @@ func get_wave_height(camera:Camera3D, global_pos:Vector3, max_cascade:int = 1, s
 	total_height *= lerp(amplitude_scale_max, amplitude_scale_min, amplitude_fade_range)
 	
 	## Planetary Curve
-	var curvation:float = planetary_curve_strength * (pow(global_pos.x - camera.global_position.x, 2.0) + pow(global_pos.y - camera.global_position.z, 2.0))
+	var curvation:float = planetary_curve_strength * (pow(global_pos.x - camera.global_position.x, 2.0) + pow(global_pos.z - camera.global_position.z, 2.0))
 	total_height -= curvation;
 	
 	return total_height

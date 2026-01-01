@@ -553,10 +553,6 @@ func get_height_at(world_pos: Vector2) -> float:
 	u = clamp(u, 0.0, 1.0)
 	v = clamp(v, 0.0, 1.0)
 	
-	# Convert to pixel coordinates
-	var _px = int(u * (heightmap.get_width() - 1))
-	var _py = int(v * (heightmap.get_height() - 1))
-	
 	# Sample heightmap (bilinear interpolation for smoother results)
 	var height_normalized = _sample_heightmap_bilinear(u, v)
 	

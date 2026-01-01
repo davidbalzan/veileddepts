@@ -14,6 +14,10 @@ var wave_marker: MeshInstance3D
 var debug_label: Label
 
 func _ready() -> void:
+	# Ensure this CanvasLayer is on top of other UI
+	layer = 128
+	# Process input even when game is paused
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	call_deferred("_deferred_setup")
 
 func _deferred_setup() -> void:
@@ -83,35 +87,39 @@ func _find_node_by_class_terrain(node: Node) -> TerrainRenderer:
 			return result
 	return null
 
-func _input(event: InputEvent) -> void:
-	# F3 input moved to _process for consistency with other updates
-	pass
-
 
 func _create_debug_markers() -> void:
+	# 3D markers need to be added to the 3D scene tree, not CanvasLayer
+	var scene_root = get_tree().root.get_node_or_null("Main")
+	if not scene_root:
+		push_warning("OceanDebugUI: Could not find Main node for 3D markers")
+		return
+
 	# Camera marker (Red sphere)
 	camera_marker = MeshInstance3D.new()
+	camera_marker.name = "DebugCameraMarker"
 	var sphere = SphereMesh.new()
-	sphere.radius = 0.2
-	sphere.height = 0.4
+	sphere.radius = 0.5
+	sphere.height = 1.0
 	camera_marker.mesh = sphere
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1, 0, 0) # Red
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	camera_marker.material_override = mat
-	add_child(camera_marker)
-	
+	scene_root.add_child(camera_marker)
+
 	# Wave height marker (Blue sphere)
 	wave_marker = MeshInstance3D.new()
+	wave_marker.name = "DebugWaveMarker"
 	var sphere2 = SphereMesh.new()
-	sphere2.radius = 0.2
-	sphere2.height = 0.4
+	sphere2.radius = 0.5
+	sphere2.height = 1.0
 	wave_marker.mesh = sphere2
 	var mat2 = StandardMaterial3D.new()
 	mat2.albedo_color = Color(0, 0, 1) # Blue
 	mat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	wave_marker.material_override = mat2
-	add_child(wave_marker)
+	scene_root.add_child(wave_marker)
 
 
 func _update_marker_visibility() -> void:
@@ -289,15 +297,23 @@ func _print_values() -> void:
 		print("time_of_day = ", atmosphere_renderer.time_of_day)
 
 
+func _input(event: InputEvent) -> void:
+	# Handle F3 toggle - match F5 panel approach
+	if event is InputEventKey:
+		var key_event = event as InputEventKey
+		if key_event.pressed and not key_event.echo:
+			if key_event.keycode == KEY_F3:
+				visible_state = not visible_state
+				if panel:
+					panel.visible = visible_state
+				_update_marker_visibility()
+				print("OceanDebugUI: F3 pressed - ", "Visible" if visible_state else "Hidden")
+
 func _process(_delta: float) -> void:
-	# Handle toggle
-	if Input.is_action_just_pressed("debug_f3"): # Or whatever action map has
-		print("F3 pressed! Toggling debug panel from ", visible_state, " to ", not visible_state)
-		visible_state = not visible_state
-		panel.visible = visible_state
-		_update_marker_visibility()
-	
 	if not visible_state:
+		return
+
+	if not panel:
 		return
 		
 	var active_camera = get_viewport().get_camera_3d()

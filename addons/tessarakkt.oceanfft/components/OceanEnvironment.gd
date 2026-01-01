@@ -68,19 +68,23 @@ class_name OceanEnvironment
 var player_is_surfaced := false
 
 
+## Track whether particle textures have been initialized
+var _particles_initialized := false
+
+
 func _ready() -> void:
-	var camera := get_viewport().get_camera_3d()
-	
 	if ocean and not ocean.initialized:
 		ocean.initialize_simulation()
-	
+
+
+func _initialize_particle_textures(camera: Camera3D) -> void:
 	if splash_particles != null:
 		splash_particles.process_material.set_shader_parameter("view_distance_max", camera.far)
 		splash_particles.process_material.set_shader_parameter("wind_uv_offset", ocean.wind_uv_offset)
 		splash_particles.process_material.set_shader_parameter("cascade_uv_scales", ocean.cascade_scales)
 		splash_particles.process_material.set_shader_parameter("cascade_displacements", ocean.get_all_waves_textures())
 		splash_particles.process_material.set_shader_parameter("uv_scale", ocean._uv_scale)
-		
+
 		if splash_sub_particles != null:
 			splash_sub_particles.process_material.set_shader_parameter("view_distance_max", camera.far)
 			splash_sub_particles.process_material.set_shader_parameter("wind_uv_offset", ocean.wind_uv_offset)
@@ -91,9 +95,16 @@ func _ready() -> void:
 
 func _process(delta:float) -> void:
 	var camera := get_viewport().get_camera_3d()
-	
+
 	if not ocean.initialized:
 		ocean.initialize_simulation()
+		return  # Wait for initialization to complete
+
+	# Initialize particle textures once ocean is ready
+	if not _particles_initialized:
+		_initialize_particle_textures(camera)
+		_particles_initialized = true
+
 	ocean.simulate(delta)
 	
 	if get_wave_height(camera.global_position, 2) > camera.global_position.y:

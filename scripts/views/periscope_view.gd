@@ -195,10 +195,13 @@ func is_underwater() -> bool:
 	# Current height of camera relative to waves
 	# Positive = above water, Negative = underwater
 	var height_above_water = cam_pos.y - wave_height
-	
-	# Debug print (throttled)
-	# if Engine.get_process_frames() % 60 == 0:
-	# 	print("Periscope depth: %.2f, Rel height: %.2f, Mode: %s" % [cam_pos.y, height_above_water, "UW" if is_underwater_mode else "SURFACE"])
+
+	# Debug print (throttled) - uncomment to diagnose underwater detection
+	if Engine.get_process_frames() % 120 == 0:
+		print("UW Check: cam.y=%.2f wave=%.2f delta=%.2f ocean_init=%s mode=%s" % [
+			cam_pos.y, wave_height, height_above_water,
+			str(ocean_renderer.initialized) if ocean_renderer else "no_ocean",
+			"UW" if is_underwater_mode else "SURFACE"])
 	
 	# Hysteresis logic (tightened)
 	if is_underwater_mode:
@@ -221,7 +224,7 @@ func apply_lens_effects() -> void:
 		# Create CanvasLayer for overlay
 		canvas_layer = CanvasLayer.new()
 		canvas_layer.name = "LensEffectCanvas"
-		canvas_layer.layer = 100  # Render on top
+		canvas_layer.layer = 50  # Below debug UI panels (which are at 100+)
 		add_child(canvas_layer)
 		
 		# Create ColorRect for full-screen shader

@@ -22,7 +22,7 @@ var camera: Camera3D
 @export var fish_count: int = 100  # Number of fish instances
 @export var spawn_radius: float = 150.0  # Radius around submarine to spawn fish
 @export var spawn_depth_min: float = -50.0  # Minimum depth for fish
-@export var spawn_depth_max: float = -5.0  # Maximum depth for fish
+@export var spawn_depth_max: float = -20.0  # Maximum depth for fish (below wave troughs)
 @export var fish_scale_min: float = 0.3  # Minimum fish scale
 @export var fish_scale_max: float = 0.8  # Maximum fish scale
 

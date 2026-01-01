@@ -28,7 +28,7 @@ func _ready() -> void:
 	# Find required nodes
 	simulation_state = get_node_or_null("/root/Main/SimulationState")
 	submarine_physics = get_node_or_null("/root/Main/SubmarinePhysics")
-	submarine_body = get_node_or_null("/root/Main/SubmarineBody")
+	submarine_body = get_node_or_null("/root/Main/SubmarineModel")
 	
 	if not simulation_state or not submarine_body:
 		push_warning("DepthControlMonitor: Could not find required nodes, will retry...")
@@ -40,7 +40,7 @@ func _ready() -> void:
 
 func _find_nodes() -> void:
 	simulation_state = get_node_or_null("/root/Main/SimulationState")
-	submarine_body = get_node_or_null("/root/Main/SubmarineBody")
+	submarine_body = get_node_or_null("/root/Main/SubmarineModel")
 	
 	if simulation_state and submarine_body:
 		_setup_ui()
