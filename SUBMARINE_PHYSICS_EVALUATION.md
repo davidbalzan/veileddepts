@@ -283,9 +283,34 @@ After optimizations: ~1.5-2ms @ 60 FPS
 ## 10. Next Steps
 
 1. ✅ Commit current working state (DONE)
-2. ⚠️ Remove debug print statements
-3. ⚠️ Fix direction calculation consistency
-4. ⚠️ Remove dead code
-5. ⚠️ Profile with Godot profiler to validate improvements
-6. ⚠️ Add submarine class presets
-7. ⚠️ Create performance test suite
+2. ✅ Remove debug print statements (DONE - Priority 1)
+3. ✅ Fix direction calculation consistency (DONE - Priority 2)
+4. ✅ Remove dead code (DONE - Priority 3)
+5. ✅ Cache forward direction (DONE - Priority 4)
+6. ✅ Improve drag model (DONE - Priority 5)
+7. ✅ Add submarine class presets (DONE - Priority 6)
+8. ✅ Optimize buoyancy (DONE - Priority 7)
+9. ⚠️ Profile with Godot profiler to validate improvements
+10. ⚠️ Create performance test suite
+
+## 11. Completed Optimizations Summary
+
+### Priority 1-3 (Committed Previously)
+- Removed 3 debug print statements
+- Fixed direction calculation consistency (drag now uses transform basis)
+- Removed dead `_apply_turning_force()` function (45 lines)
+- Fixed unused parameter warning
+
+### Priority 4-7 (Just Committed)
+- Added forward direction caching with `_get_forward_direction()` method
+- Improved drag model to apply forward/sideways forces separately
+- Added submarine class presets (Los_Angeles, Ohio, Virginia, Seawolf, Default)
+- Added `load_submarine_class()` and `get_available_classes()` methods
+- Optimized buoyancy with early exit when deep (skips wave sampling)
+- Fixed reserved keyword conflict (class_name -> sub_class)
+
+### Total Performance Improvement
+- Estimated 8-15% CPU reduction from all optimizations
+- Better physics accuracy from improved drag model
+- Cleaner code with 45 lines of dead code removed
+- Enhanced configurability with submarine class presets
