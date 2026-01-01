@@ -4,7 +4,7 @@ extends Node
 ## This script initializes all core systems and manages the main game loop.
 
 # Preload physics class
-const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
+const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics.gd")
 
 # References to core systems
 @onready var view_manager: Node = $ViewManager
