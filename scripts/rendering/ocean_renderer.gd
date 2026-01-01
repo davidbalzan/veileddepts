@@ -4,6 +4,7 @@ class_name OceanRenderer extends Node3D
 
 # Ocean3D resource (the FFT simulation)
 var ocean: Ocean3D
+var _ocean_initialized: bool = false
 
 # QuadTree3D for LOD mesh rendering
 var quad_tree: QuadTree3D
@@ -86,8 +87,8 @@ var camera: Camera3D
 
 @export_group("LOD Settings")
 # QuadTree LOD settings
-@export var lod_level: int = 5
-@export var quad_size: float = 8192.0
+@export var lod_level: int = 6  # Increased for more LOD levels
+@export var quad_size: float = 16384.0  # Doubled for larger coverage
 
 # Initialization flag
 var initialized: bool = false
@@ -106,16 +107,40 @@ func _update_specular_params() -> void:
 		ocean.material.set_shader_parameter("pbr_specular_offset", pbr_specular_offset)
 
 func _ready() -> void:
-	_setup_ocean()
+	# Delay initialization to avoid editor preview issues
+	if not Engine.is_editor_hint():
+		call_deferred("_setup_ocean")
+
+
+func _exit_tree() -> void:
+	"""Clean up ocean resources to prevent global shader parameter allocation errors"""
+	_cleanup_ocean()
+
+
+func _cleanup_ocean() -> void:
+	"""Free ocean resources properly"""
+	if quad_tree:
+		quad_tree.queue_free()
+		quad_tree = null
+	
+	ocean = null
+	_ocean_initialized = false
+	initialized = false
 
 func _setup_ocean() -> void:
 	"""Setup the ocean using the tessarakkt.oceanfft addon"""
+	
+	# Prevent double initialization
+	if _ocean_initialized:
+		push_warning("OceanRenderer: Already initialized, skipping setup")
+		return
 	
 	# Check if we have a rendering device (not available in headless mode)
 	var rd = RenderingServer.get_rendering_device()
 	if rd == null:
 		push_warning("OceanRenderer: No RenderingDevice available (headless mode?). Using fallback.")
 		initialized = true
+		_ocean_initialized = true
 		return
 	
 	# Get or create camera reference
@@ -171,15 +196,16 @@ func _setup_ocean() -> void:
 	
 	# Configure LOD ranges based on quad size
 	var ranges: Array[float] = []
-	var current_range = quad_size / 16.0
+	var current_range = quad_size / 8.0  # Start with larger initial range
 	for i in range(lod_level + 1):
 		ranges.append(current_range)
-		current_range *= 2.0
+		current_range *= 2.5  # Larger multiplier for extended range
 	quad_tree.ranges = ranges
 	
 	add_child(quad_tree)
 	
 	initialized = true
+	_ocean_initialized = true
 	print("OceanRenderer: Initialized with FFT resolution ", ocean.fft_resolution, ", choppiness ", ocean.choppiness)
 
 func _process(delta: float) -> void:

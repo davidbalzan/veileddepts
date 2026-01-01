@@ -126,7 +126,7 @@ func test_apply_buoyancy_with_rigid_body():
 
 func test_default_parameters():
 	assert_almost_eq(ocean_renderer.wind_speed, 15.0, 0.001, "Default wind speed should be 15")
-	assert_almost_eq(ocean_renderer.choppiness, 1.8, 0.001, "Default choppiness should be 1.8")
+	assert_almost_eq(ocean_renderer.choppiness, 1.5, 0.001, "Default choppiness should be 1.5")
 	assert_almost_eq(ocean_renderer.time_scale, 1.0, 0.001, "Default time scale should be 1.0")
 
 func test_fft_resolution_index():
@@ -136,7 +136,7 @@ func test_horizontal_dimension():
 	assert_eq(ocean_renderer.horizontal_dimension, 512, "Default horizontal dimension should be 512")
 
 func test_lod_level():
-	assert_eq(ocean_renderer.lod_level, 5, "Default LOD level should be 5")
+	assert_eq(ocean_renderer.lod_level, 6, "Default LOD level should be 6")
 
 func test_quad_size():
-	assert_almost_eq(ocean_renderer.quad_size, 8192.0, 0.001, "Default quad size should be 8192")
+	assert_almost_eq(ocean_renderer.quad_size, 16384.0, 0.001, "Default quad size should be 16384")

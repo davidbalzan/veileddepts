@@ -8,13 +8,14 @@ class_name SimulationState extends Node
 var submarine_position: Vector3 = Vector3.ZERO
 var submarine_velocity: Vector3 = Vector3.ZERO
 var submarine_depth: float = 0.0  # meters below surface
-var submarine_heading: float = 0.0  # degrees (0-360, where 0 is north)
+var submarine_heading: float = 0.0  # degrees (0-360, where 0 is north) - CURRENT heading
 var submarine_speed: float = 0.0  # meters per second
 
 ## Target values for submarine commands
 var target_waypoint: Vector3 = Vector3.ZERO
 var target_depth: float = 0.0
 var target_speed: float = 0.0
+var target_heading: float = 0.0  # Target heading for propulsion
 
 ## Submarine operational limits
 const MAX_SPEED: float = 10.3  # 20 knots in m/s
@@ -37,6 +38,7 @@ func _ready() -> void:
 	target_waypoint = Vector3.ZERO
 	target_depth = 0.0
 	target_speed = 0.0
+	target_heading = 0.0  # North by default
 
 
 ## Update submarine command with new waypoint, speed, and depth
@@ -45,23 +47,44 @@ func update_submarine_command(waypoint: Vector3, speed: float, depth: float) -> 
 	# Set target waypoint
 	target_waypoint = waypoint
 	
-	# Clamp speed to operational limits
-	target_speed = clamp(speed, 0.0, MAX_SPEED)
+	# Clamp speed to operational limits (allow negative for reverse)
+	target_speed = clamp(speed, -MAX_SPEED * 0.5, MAX_SPEED)  # Reverse at half speed
 	
 	# Clamp depth to operational limits
 	target_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
 	
-	# Update heading to point toward waypoint
+	# Update TARGET heading to point toward waypoint
 	var delta = waypoint - submarine_position
 	if delta.length() > 0.1:  # Only update if waypoint is not at current position
 		# Calculate heading from position to waypoint
-		# atan2(x, z) gives angle where 0 is north (+Z), 90 is east (+X)
-		var heading_rad = atan2(delta.x, delta.z)
-		submarine_heading = rad_to_deg(heading_rad)
+		# atan2(x, -z) gives angle where 0 is north (-Z), 90 is east (+X)
+		var heading_rad = atan2(delta.x, -delta.z)
+		target_heading = rad_to_deg(heading_rad)
 		
 		# Normalize to 0-360 range
-		if submarine_heading < 0:
-			submarine_heading += 360.0
+		if target_heading < 0:
+			target_heading += 360.0
+
+
+## Set target speed directly without changing waypoint or heading
+## Allows negative values for reverse (at half max speed)
+func set_target_speed(speed: float) -> void:
+	target_speed = clamp(speed, -MAX_SPEED * 0.5, MAX_SPEED)
+
+
+## Set target heading directly without changing waypoint
+func set_target_heading(heading: float) -> void:
+	target_heading = heading
+	# Normalize to 0-360 range
+	while target_heading < 0:
+		target_heading += 360.0
+	while target_heading >= 360:
+		target_heading -= 360.0
+
+
+## Set target depth directly without changing waypoint or speed
+func set_target_depth(depth: float) -> void:
+	target_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
 
 
 ## Add a new contact to the tracking system
@@ -180,7 +203,8 @@ func get_submarine_state() -> Dictionary:
 		"speed": submarine_speed,
 		"target_waypoint": target_waypoint,
 		"target_depth": target_depth,
-		"target_speed": target_speed
+		"target_speed": target_speed,
+		"target_heading": target_heading
 	}
 
 

@@ -18,6 +18,11 @@ class_name TerrainRenderer extends Node3D
 @export var noise_lacunarity: float = 2.0
 @export var noise_persistence: float = 0.5
 
+@export_group("Micro Detail Settings")
+@export var enable_micro_detail: bool = true  # Add fine detail to terrain
+@export var micro_detail_scale: float = 2.0  # Height variation in meters for micro detail
+@export var micro_detail_frequency: float = 0.05  # Frequency of micro detail noise
+
 @export_group("LOD Settings")
 @export var lod_levels: int = 4  # Number of LOD levels
 @export var lod_distance_multiplier: float = 2.0  # Distance multiplier between LOD levels
@@ -117,8 +122,15 @@ func _setup_builtin_terrain() -> void:
 	noise.fractal_lacunarity = noise_lacunarity
 	noise.fractal_gain = noise_persistence
 	
-	# Generate heightmap
-	generate_heightmap(noise_seed, terrain_size)
+	# Load external heightmap if enabled, otherwise generate procedural
+	if use_external_heightmap and external_heightmap_path != "":
+		if not load_heightmap_from_file(external_heightmap_path, heightmap_region):
+			# Fallback to procedural if loading fails
+			print("TerrainRenderer: Failed to load external heightmap, using procedural")
+			generate_heightmap(noise_seed, terrain_size)
+	else:
+		# Generate heightmap
+		generate_heightmap(noise_seed, terrain_size)
 	
 	# Create terrain material with parallax occlusion
 	_create_terrain_material()
@@ -626,13 +638,14 @@ func get_normal_at(world_pos: Vector2) -> Vector3:
 # ============================================================================
 
 ## Path to external heightmap image (e.g., "res://src_assets/World_elevation_map.png")
-@export var external_heightmap_path: String = ""
+@export var external_heightmap_path: String = "res://src_assets/World_elevation_map.png"
 
 ## Region of the external heightmap to use (in UV coordinates 0-1)
-@export var heightmap_region: Rect2 = Rect2(0, 0, 1, 1)
+## Default: Mediterranean region (good mix of land and water)
+@export var heightmap_region: Rect2 = Rect2(0.25, 0.3, 0.1, 0.1)
 
 ## Whether to use external heightmap instead of procedural generation
-@export var use_external_heightmap: bool = false
+@export var use_external_heightmap: bool = true
 
 
 func load_heightmap_from_file(path: String, region: Rect2 = Rect2(0, 0, 1, 1)) -> bool:
@@ -663,15 +676,48 @@ func load_heightmap_from_file(path: String, region: Rect2 = Rect2(0, 0, 1, 1)) -
 	var region_image = image.get_region(Rect2i(region_x, region_y, region_w, region_h))
 	region_image.resize(terrain_resolution, terrain_resolution, Image.INTERPOLATE_LANCZOS)
 	
+	# Initialize micro-detail noise if enabled
+	var micro_noise: FastNoiseLite = null
+	if enable_micro_detail:
+		micro_noise = FastNoiseLite.new()
+		micro_noise.seed = noise_seed + 1000  # Different seed for micro detail
+		micro_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		micro_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+		micro_noise.fractal_octaves = 3  # Fewer octaves for fine detail
+		micro_noise.frequency = micro_detail_frequency
+		micro_noise.fractal_lacunarity = 2.0
+		micro_noise.fractal_gain = 0.5
+	
 	# Convert to grayscale heightmap (use red channel or luminance)
 	heightmap = Image.create(terrain_resolution, terrain_resolution, false, Image.FORMAT_RF)
+	
+	var half_size_x = terrain_size.x / 2.0
+	var half_size_y = terrain_size.y / 2.0
 	
 	for y in range(terrain_resolution):
 		for x in range(terrain_resolution):
 			var pixel = region_image.get_pixel(x, y)
 			# Use luminance for grayscale conversion
-			var height_value = pixel.r * 0.299 + pixel.g * 0.587 + pixel.b * 0.114
-			heightmap.set_pixel(x, y, Color(height_value, 0, 0, 1))
+			var base_height = pixel.r * 0.299 + pixel.g * 0.587 + pixel.b * 0.114
+			
+			# Add micro detail if enabled
+			if enable_micro_detail and micro_noise:
+				# Convert pixel coordinates to world coordinates for noise sampling
+				var world_x = (float(x) / terrain_resolution) * terrain_size.x - half_size_x
+				var world_z = (float(y) / terrain_resolution) * terrain_size.y - half_size_y
+				
+				# Get micro detail noise (-1 to 1)
+				var detail_noise = micro_noise.get_noise_2d(world_x, world_z)
+				
+				# Scale micro detail based on the base height to preserve original terrain shape
+				# Less detail in flat areas (water), more detail on slopes
+				var detail_amount = micro_detail_scale / (max_height - min_height)
+				var height_variation = detail_noise * detail_amount * 0.5  # Keep it subtle
+				
+				# Add detail while clamping to valid range
+				base_height = clamp(base_height + height_variation, 0.0, 1.0)
+			
+			heightmap.set_pixel(x, y, Color(base_height, 0, 0, 1))
 	
 	# Create texture from heightmap
 	heightmap_texture = ImageTexture.create_from_image(heightmap)
@@ -680,7 +726,8 @@ func load_heightmap_from_file(path: String, region: Rect2 = Rect2(0, 0, 1, 1)) -
 	if terrain_material:
 		terrain_material.set_shader_parameter("heightmap", heightmap_texture)
 	
-	print("TerrainRenderer: Loaded heightmap from ", path, " (region: ", region, ")")
+	var detail_status = " (with micro detail)" if enable_micro_detail else ""
+	print("TerrainRenderer: Loaded heightmap from ", path, " (region: ", region, ")", detail_status)
 	return true
 
 
@@ -722,4 +769,66 @@ func set_terrain_region(region: Rect2) -> void:
 	if use_external_heightmap and external_heightmap_path != "":
 		load_heightmap_from_file(external_heightmap_path, region)
 		regenerate_terrain()
+
+
+func find_safe_spawn_position(preferred_position: Vector3 = Vector3.ZERO, search_radius: float = 500.0, min_depth: float = -50.0) -> Vector3:
+	"""Find a safe spawn position in water (below sea level, above sea floor)
+	
+	Args:
+		preferred_position: Preferred spawn location (will search nearby)
+		search_radius: How far to search for a valid position
+		min_depth: Minimum depth below sea level for safe spawning
+	
+	Returns:
+		A safe spawn position in water, or preferred_position if no valid position found
+	"""
+	if not initialized or not heightmap:
+		push_warning("TerrainRenderer: Cannot find spawn position - terrain not initialized")
+		return preferred_position
+	
+	# Try the preferred position first
+	var terrain_height = get_height_at(Vector2(preferred_position.x, preferred_position.z))
+	if terrain_height < sea_level + min_depth:
+		# Position is underwater and safe
+		var safe_depth = (terrain_height + sea_level + min_depth) / 2.0
+		return Vector3(preferred_position.x, safe_depth, preferred_position.z)
+	
+	# Search in a spiral pattern for a valid water position
+	var search_steps = 16
+	var angle_step = TAU / 8.0  # 8 directions
+	
+	for ring in range(1, search_steps):
+		var radius = (float(ring) / search_steps) * search_radius
+		
+		for angle_idx in range(8):
+			var angle = angle_idx * angle_step
+			var test_pos = Vector2(
+				preferred_position.x + cos(angle) * radius,
+				preferred_position.z + sin(angle) * radius
+			)
+			
+			var test_height = get_height_at(test_pos)
+			if test_height < sea_level + min_depth:
+				# Found a valid water position
+				var safe_depth = (test_height + sea_level + min_depth) / 2.0
+				print("TerrainRenderer: Found safe spawn position at ", Vector3(test_pos.x, safe_depth, test_pos.y))
+				return Vector3(test_pos.x, safe_depth, test_pos.y)
+	
+	# No valid position found, return a position well below sea level
+	push_warning("TerrainRenderer: Could not find safe spawn position, using default depth")
+	return Vector3(preferred_position.x, sea_level + min_depth, preferred_position.z)
+
+
+func is_position_underwater(world_position: Vector3, margin: float = 5.0) -> bool:
+	"""Check if a position is safely underwater (below sea level, above sea floor)
+	
+	Args:
+		world_position: Position to check
+		margin: Safety margin above sea floor
+	
+	Returns:
+		True if position is safely underwater
+	"""
+	var terrain_height = get_height_at_3d(world_position)
+	return world_position.y < sea_level and world_position.y > terrain_height + margin
 

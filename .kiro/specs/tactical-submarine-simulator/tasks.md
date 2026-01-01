@@ -252,13 +252,13 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - Configure SSR for water reflections
     - _Requirements: 8.4, 8.5_
 
-- [ ] 13. Sealife System
-  - [ ] 13.1 Implement sealife rendering
+- [x] 13. Sealife System
+  - [x] 13.1 Implement sealife rendering
     - Create fish school using MultiMeshInstance3D or GPUParticles3D
     - Add simple fish models (low-poly)
     - _Requirements: 9.1_
 
-  - [ ] 13.2 Implement sealife culling
+  - [x] 13.2 Implement sealife culling
     - Add distance-based culling
     - Add foam-based culling (cull in high-foam areas)
     - _Requirements: 9.2, 9.3_
@@ -267,14 +267,14 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 23: Sealife Culling Rules**
     - **Validates: Requirements 9.2, 9.3**
 
-- [ ] 14. AI System
-  - [ ] 14.1 Implement AIAgent class
+- [x] 14. AI System
+  - [x] 14.1 Implement AIAgent class
     - Create AIAgent.gd with State enum (PATROL, SEARCH, ATTACK)
     - Add NavigationAgent3D for pathfinding
     - Implement state machine with transition logic
     - _Requirements: 10.1, 10.2, 10.3_
 
-  - [ ] 14.2 Implement patrol behavior
+  - [x] 14.2 Implement patrol behavior
     - Add update_patrol method to follow waypoint routes
     - Implement detection scanning for submarine
     - _Requirements: 10.1_
@@ -283,7 +283,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 24: AI Patrol Route Following**
     - **Validates: Requirements 10.1**
 
-  - [ ] 14.4 Implement search behavior
+  - [x] 14.4 Implement search behavior
     - Add update_search method to investigate last known position
     - Implement search timeout (60 seconds)
     - _Requirements: 10.2_
@@ -292,7 +292,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 25: AI Detection State Transition**
     - **Validates: Requirements 10.2**
 
-  - [ ] 14.6 Implement attack behavior
+  - [x] 14.6 Implement attack behavior
     - Add update_attack method with dipping sonar pattern
     - Implement attack range checking
     - _Requirements: 10.3_
@@ -301,19 +301,19 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 26: AI Attack Behavior Activation**
     - **Validates: Requirements 10.3**
 
-  - [ ] 14.8 Add AI visual effects
+  - [x] 14.8 Add AI visual effects
     - Add contrails using GPUParticles3D
     - Add shadows on ocean surface
     - _Requirements: 10.4_
 
-  - [ ] 14.9 Implement AISystem manager
+  - [x] 14.9 Implement AISystem manager
     - Create AISystem.gd to manage multiple AI agents
     - Add spawn_air_patrol method
     - Integrate with simulation state for submarine detection
     - _Requirements: 10.5_
 
-- [ ] 15. Sonar and Detection Systems
-  - [ ] 15.1 Implement SonarSystem class
+- [x] 15. Sonar and Detection Systems
+  - [x] 15.1 Implement SonarSystem class
     - Create SonarSystem.gd
     - Implement passive sonar detection (bearing only, 5s update)
     - Implement active sonar detection (bearing + range, 2s update)
@@ -328,7 +328,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 8: Contact Update Frequency**
     - **Validates: Requirements 2.4**
 
-  - [ ] 15.4 Implement thermal layer effects
+  - [x] 15.4 Implement thermal layer effects
     - Add thermal layer simulation affecting detection ranges
     - _Requirements: 11.2_
 
@@ -336,7 +336,7 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - **Property 29: Thermal Layer Detection Effects**
     - **Validates: Requirements 11.2**
 
-- [ ] 16. Checkpoint - Simulation Complete
+- [x] 16. Checkpoint - Simulation Complete
   - Verify AI patrols navigate and detect submarine
   - Verify sonar system detects and tracks contacts
   - Verify terrain collision prevents submarine penetration

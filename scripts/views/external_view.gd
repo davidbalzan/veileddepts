@@ -42,6 +42,12 @@ var is_rotating: bool = false
 var is_tilting: bool = false
 var last_mouse_position: Vector2 = Vector2.ZERO
 
+## Debug visualization
+var show_debug_vectors: bool = false
+var thrust_arrow: Node3D = null
+var velocity_arrow: Node3D = null
+var target_arrow: Node3D = null
+
 
 func _ready() -> void:
 	# Find camera in scene tree
@@ -63,6 +69,9 @@ func _ready() -> void:
 	
 	# Initialize camera position
 	update_camera_position()
+	
+	# Create debug arrow nodes
+	_create_debug_arrows()
 	
 	print("ExternalView: Initialized")
 
@@ -87,9 +96,16 @@ func update_camera_position() -> void:
 		# In orbit mode, calculate position around submarine
 		var submarine_pos = simulation_state.submarine_position
 		
+		# Get submarine body rotation directly
+		var main_node = get_parent()
+		var submarine_body = main_node.get_node_or_null("SubmarineBody")
+		var submarine_body_yaw = submarine_body.rotation.y if submarine_body else 0.0
+		
 		# Convert tilt and rotation to radians
 		var tilt_rad = deg_to_rad(camera_tilt)
-		var rotation_rad = deg_to_rad(camera_rotation)
+		# Camera rotation is relative to submarine body rotation
+		# rotation=0 means behind submarine, rotation=180 means in front
+		var rotation_rad = deg_to_rad(camera_rotation + 180.0) + submarine_body_yaw
 		
 		# Calculate offset from submarine
 		# Horizontal distance is affected by tilt (more tilt = less horizontal distance)
@@ -195,6 +211,10 @@ func _process(delta: float) -> void:
 	# Update camera position to track submarine (or maintain free camera position)
 	update_camera_position()
 	
+	# Update debug vectors if enabled
+	if show_debug_vectors:
+		_update_debug_vectors()
+	
 	# Handle free camera movement with WASD keys
 	if free_camera_mode and visible:
 		var movement = Vector3.ZERO
@@ -253,12 +273,29 @@ func _input(event: InputEvent) -> void:
 				# Zoom out (increase distance)
 				handle_distance_input(DISTANCE_SENSITIVITY)
 	
-	# Handle F key for free camera toggle
+	# Handle F key for free camera toggle and F3 for debug vectors
 	elif event is InputEventKey:
 		var key_event = event as InputEventKey
 		if key_event.pressed and not key_event.echo:
 			if key_event.keycode == KEY_F:
 				toggle_free_camera()
+			elif key_event.keycode == KEY_F3:
+				# Toggle debug vector visualization
+				show_debug_vectors = not show_debug_vectors
+				if thrust_arrow:
+					thrust_arrow.visible = show_debug_vectors
+				if velocity_arrow:
+					velocity_arrow.visible = show_debug_vectors
+				if target_arrow:
+					target_arrow.visible = show_debug_vectors
+				var sub_forward_arrow = get_node_or_null("SubForwardArrow")
+				if sub_forward_arrow:
+					sub_forward_arrow.visible = show_debug_vectors
+				print("ExternalView: Debug vectors ", "enabled" if show_debug_vectors else "disabled")
+			elif key_event.keycode == KEY_P:
+				# Toggle pause
+				get_tree().paused = not get_tree().paused
+				print("Game ", "PAUSED" if get_tree().paused else "RESUMED")
 
 
 ## Get contacts that should be rendered based on fog of war
@@ -280,3 +317,135 @@ func get_visible_contacts() -> Array[Contact]:
 			visible_contacts.append(contact)
 	
 	return visible_contacts
+
+
+## Create debug arrow nodes using CSG shapes
+func _create_debug_arrows() -> void:
+	# Create thrust arrow (RED)
+	thrust_arrow = _create_arrow_node("ThrustArrow", Color.RED)
+	add_child(thrust_arrow)
+	thrust_arrow.visible = false
+	
+	# Create velocity arrow (BLUE)
+	velocity_arrow = _create_arrow_node("VelocityArrow", Color.BLUE)
+	add_child(velocity_arrow)
+	velocity_arrow.visible = false
+	
+	# Create target arrow (YELLOW)
+	target_arrow = _create_arrow_node("TargetArrow", Color.YELLOW)
+	add_child(target_arrow)
+	target_arrow.visible = false
+	
+	# Create submarine forward indicator (GREEN) - shows model's actual forward
+	var sub_forward_arrow = _create_arrow_node("SubForwardArrow", Color.GREEN)
+	add_child(sub_forward_arrow)
+	sub_forward_arrow.visible = false
+	sub_forward_arrow.set_meta("is_sub_forward", true)
+
+
+## Create a single arrow node using CSG
+func _create_arrow_node(arrow_name: String, color: Color) -> Node3D:
+	var arrow_root = Node3D.new()
+	arrow_root.name = arrow_name
+	arrow_root.top_level = true  # Use world coordinates
+	
+	# Create arrow shaft (cylinder)
+	var shaft = CSGCylinder3D.new()
+	shaft.name = "Shaft"
+	shaft.radius = 0.3
+	shaft.height = 20.0
+	shaft.material = StandardMaterial3D.new()
+	shaft.material.albedo_color = color
+	shaft.material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	arrow_root.add_child(shaft)
+	
+	# Create arrowhead (cone)
+	var head = CSGCylinder3D.new()
+	head.name = "Head"
+	head.radius = 0.8
+	head.height = 3.0
+	head.cone = true
+	head.material = StandardMaterial3D.new()
+	head.material.albedo_color = color
+	head.material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	head.position = Vector3(0, 11.5, 0)  # At the end of shaft
+	arrow_root.add_child(head)
+	
+	return arrow_root
+
+
+## Update debug vector visualization using CSG arrows
+func _update_debug_vectors() -> void:
+	if not simulation_state:
+		return
+	
+	# Get submarine body reference
+	var main_node = get_parent()
+	var submarine_body = main_node.get_node_or_null("SubmarineModel")
+	if not submarine_body:
+		return
+	
+	var sub_pos = submarine_body.global_position
+	var velocity = submarine_body.linear_velocity
+	
+	# Get submarine's forward direction from transform basis (matches physics)
+	var thrust_direction = -submarine_body.global_transform.basis.z
+	
+	# Get submarine's ACTUAL forward direction from its transform basis
+	var model_forward = -submarine_body.global_transform.basis.z  # Should be same as thrust_direction
+	
+	# DEBUG: Verify they match
+	print("ARROW: thrust=(%.3f,%.3f,%.3f) model=(%.3f,%.3f,%.3f) body_rot.y=%.3f°" % [
+		thrust_direction.x, thrust_direction.y, thrust_direction.z,
+		model_forward.x, model_forward.y, model_forward.z,
+		rad_to_deg(submarine_body.rotation.y)
+	])
+	
+	# Get target heading direction
+	var target_heading_rad = deg_to_rad(simulation_state.target_heading)
+	var target_direction = Vector3(sin(target_heading_rad), 0.0, -cos(target_heading_rad))
+	
+	# Update thrust arrow (RED) - calculated from rotation.y
+	if thrust_arrow:
+		_position_arrow(thrust_arrow, sub_pos, thrust_direction, 20.0)
+	
+	# Update submarine forward arrow (GREEN) - actual model forward from transform
+	var sub_forward_arrow = get_node_or_null("SubForwardArrow")
+	if sub_forward_arrow:
+		_position_arrow(sub_forward_arrow, sub_pos, model_forward, 15.0)
+		sub_forward_arrow.visible = show_debug_vectors
+	
+	# Update velocity arrow (BLUE)
+	if velocity_arrow and velocity.length() > 0.1:
+		var vel_direction = velocity.normalized()
+		_position_arrow(velocity_arrow, sub_pos, vel_direction, velocity.length() * 5.0)
+		velocity_arrow.visible = show_debug_vectors
+	elif velocity_arrow:
+		velocity_arrow.visible = false
+	
+	# Update target arrow (YELLOW)
+	if target_arrow:
+		_position_arrow(target_arrow, sub_pos, target_direction, 25.0)
+
+
+## Position and orient an arrow to point in a direction
+func _position_arrow(arrow: Node3D, start_pos: Vector3, direction: Vector3, length: float) -> void:
+	# Position at start
+	arrow.global_position = start_pos
+	
+	# Reset rotation first
+	arrow.global_rotation = Vector3.ZERO
+	
+	# Orient to point in direction
+	# Arrows point along +Y axis by default, so we need to rotate to align with direction
+	if direction.length() > 0.001:
+		var normalized_dir = direction.normalized()
+		# Point the arrow in the direction
+		arrow.look_at(start_pos + normalized_dir, Vector3.UP)
+		# Rotate 90° around local X axis to align arrow (which points up) with forward direction
+		arrow.rotate_object_local(Vector3.RIGHT, -PI / 2)
+	
+	# Scale arrow to desired length
+	var shaft = arrow.get_node_or_null("Shaft")
+	if shaft:
+		shaft.height = length

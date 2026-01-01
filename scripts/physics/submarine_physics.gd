@@ -13,32 +13,44 @@ var submarine_body: RigidBody3D
 var ocean_renderer: OceanRenderer
 var simulation_state: SimulationState
 
-# Physics parameters (from design document)
-const MASS: float = 8000.0  # tons (converted to kg in calculations)
-const DRAG_COEFFICIENT: float = 0.04
-const MAX_SPEED: float = 10.3  # 20 knots in m/s
-const MAX_DEPTH: float = 400.0  # meters
-const DEPTH_CHANGE_RATE: float = 5.0  # m/s
-const TURN_RATE_FAST: float = 3.0  # degrees/second at full speed
-const TURN_RATE_SLOW: float = 10.0  # degrees/second at slow speed
-const SLOW_SPEED_THRESHOLD: float = 2.0  # m/s
+# Physics parameters (from design document) - can be overridden per submarine class
+var mass: float = 8000.0  # tons (converted to kg in calculations)
+var drag_coefficient: float = 0.5
+var max_speed: float = 10.3  # 20 knots in m/s
+var max_depth: float = 400.0  # meters
+var depth_change_rate: float = 5.0  # m/s
+var turn_rate_fast: float = 3.0  # degrees/second at full speed
+var turn_rate_slow: float = 10.0  # degrees/second at slow speed
 
 # Buoyancy parameters
-const WATER_DENSITY: float = 1025.0  # kg/m^3 (seawater)
-const SUBMARINE_VOLUME: float = 8000.0  # m^3 (approximate displacement)
-const BUOYANCY_COEFFICIENT: float = 1.0
+var water_density: float = 1025.0  # kg/m^3 (seawater)
+var submarine_volume: float = 8000.0  # m^3 (approximate displacement)
+var buoyancy_coefficient: float = 1.0  # Balanced for neutral buoyancy at surface
 
 # Propulsion parameters
-const PROPULSION_FORCE_MAX: float = 500000.0  # Newtons
-const PROPULSION_RESPONSE_TIME: float = 2.0  # seconds to reach target speed
+var propulsion_force_max: float = 35000000.0  # Newtons - 35 MN
+var propulsion_response_time: float = 2.0  # seconds to reach target speed
+
+# Drag parameters
+var forward_drag: float = 2000.0  # Forward drag coefficient
+var sideways_drag: float = 800000.0  # Sideways drag coefficient (400x forward)
+
+# Steering parameters
+var rudder_effectiveness: float = 250000.0  # Rudder turning force multiplier
+var stabilizer_effectiveness: float = 10000.0  # Forward stabilizer resistance
+var mid_stabilizer_effectiveness: float = 250000.0  # Mid-body slip resistance
 
 # Depth control parameters
-const BALLAST_FORCE_MAX: float = 200000.0  # Newtons
-const DEPTH_CONTROL_RESPONSE_TIME: float = 3.0  # seconds
+var ballast_force_max: float = 50000000.0  # Newtons
+var depth_control_response_time: float = 5.0  # seconds
 
 # Current physics state
 var current_propulsion_force: float = 0.0
 var current_ballast_force: float = 0.0
+
+# PID control state for depth
+var depth_error_integral: float = 0.0
+var previous_depth_error: float = 0.0
 
 func _ready() -> void:
 	# Physics will be initialized when connected to other systems
@@ -63,39 +75,167 @@ func initialize(p_submarine_body: RigidBody3D, p_ocean_renderer: OceanRenderer, 
 		return
 	
 	# Set submarine mass
-	submarine_body.mass = MASS * 1000.0  # Convert tons to kg
+	submarine_body.mass = mass * 1000.0  # Convert tons to kg
 	
 	print("SubmarinePhysics initialized")
 
+
+## Configure physics parameters for a specific submarine class
+## Call this after initialize() to override default parameters
+func configure_submarine_class(config: Dictionary) -> void:
+	if config.has("mass"):
+		mass = config["mass"]
+		if submarine_body:
+			submarine_body.mass = mass * 1000.0
+	
+	if config.has("max_speed"):
+		max_speed = config["max_speed"]
+	
+	if config.has("max_depth"):
+		max_depth = config["max_depth"]
+	
+	if config.has("propulsion_force_max"):
+		propulsion_force_max = config["propulsion_force_max"]
+	
+	if config.has("forward_drag"):
+		forward_drag = config["forward_drag"]
+	
+	if config.has("sideways_drag"):
+		sideways_drag = config["sideways_drag"]
+	
+	if config.has("rudder_effectiveness"):
+		rudder_effectiveness = config["rudder_effectiveness"]
+	
+	if config.has("stabilizer_effectiveness"):
+		stabilizer_effectiveness = config["stabilizer_effectiveness"]
+	
+	if config.has("mid_stabilizer_effectiveness"):
+		mid_stabilizer_effectiveness = config["mid_stabilizer_effectiveness"]
+	
+	if config.has("ballast_force_max"):
+		ballast_force_max = config["ballast_force_max"]
+	
+	if config.has("submarine_volume"):
+		submarine_volume = config["submarine_volume"]
+	
+	print("SubmarinePhysics configured for class: ", config.get("class_name", "Custom"))
+
 ## Apply buoyancy force based on ocean wave heights and submarine displacement
 ## Validates: Requirements 11.1, 11.5
-func apply_buoyancy(_delta: float) -> void:
-	if not submarine_body or not ocean_renderer:
+func apply_buoyancy(delta: float) -> void:
+	if not submarine_body:
 		return
 	
 	var sub_pos = submarine_body.global_position
-	var wave_height = ocean_renderer.get_wave_height(Vector2(sub_pos.x, sub_pos.z))
+	var current_depth = -sub_pos.y  # Depth is positive going down
 	
-	# Calculate water level at submarine position
+	# Get wave height at submarine position
+	var wave_height: float = 0.0
+	if ocean_renderer and ocean_renderer.initialized:
+		wave_height = ocean_renderer.get_wave_height(Vector2(sub_pos.x, sub_pos.z))
+	
+	# Calculate water level at submarine position (wave height is relative to y=0)
 	var water_level = wave_height
 	
-	# Calculate submersion depth
-	var submersion_depth = water_level - sub_pos.y
+	# Calculate how deep the submarine center is below the water surface
+	# Positive = underwater, Negative = above water
+	var depth_below_surface = water_level - sub_pos.y
+	
+	# Submarine hull height (approximate)
+	const HULL_HEIGHT: float = 5.0  # meters
+	const HALF_HULL: float = HULL_HEIGHT / 2.0
+	
+	# Calculate submersion ratio based on how much of the hull is underwater
+	var submersion_ratio = clamp((depth_below_surface + HALF_HULL) / HULL_HEIGHT, 0.0, 1.0)
 	
 	# Calculate buoyancy force using Archimedes' principle
-	# F_buoyancy = ρ * V * g * submersion_ratio
-	var submersion_ratio = clamp(submersion_depth / 10.0, 0.0, 1.0)  # Assume 10m submarine height
+	var displaced_volume = submarine_volume * submersion_ratio
+	var buoyancy_force = water_density * displaced_volume * 9.81 * buoyancy_coefficient
 	
-	var buoyancy_force = WATER_DENSITY * SUBMARINE_VOLUME * 9.81 * submersion_ratio * BUOYANCY_COEFFICIENT
-	
-	# Apply upward force
+	# Apply buoyancy force
 	submarine_body.apply_central_force(Vector3.UP * buoyancy_force)
 	
-	# For surface submarines (depth < 5m), apply wave-induced motion
-	if simulation_state.submarine_depth < 5.0:
-		# Apply vertical wave motion
-		var wave_force = Vector3.UP * (wave_height - sub_pos.y) * 50000.0
-		submarine_body.apply_central_force(wave_force)
+	# Get target depth from simulation state
+	var target_depth = simulation_state.target_depth if simulation_state else 0.0
+	
+	# Calculate wave influence factor - decreases with depth and target depth
+	# At surface (depth=0, target=0): full wave influence (1.0)
+	# At depth > 10m or target > 5m: minimal wave influence (0.0)
+	var depth_factor = 1.0 - clamp(current_depth / 10.0, 0.0, 1.0)
+	var target_factor = 1.0 - clamp(target_depth / 5.0, 0.0, 1.0)
+	var wave_influence = depth_factor * target_factor
+	
+	# Debug output for diving attempts (remove after testing)
+	# if target_depth > 0.1:
+	#	print("Diving: depth=%.1f target=%.1f wave_influence=%.3f buoyancy=%.0f" % [current_depth, target_depth, wave_influence, buoyancy_force])
+	
+	# Surface behavior: Apply spring force to follow wave surface
+	# Strength depends on wave_influence (weaker when diving)
+	if wave_influence > 0.01:
+		var surface_error = water_level - sub_pos.y
+		
+		# Scale spring constant by wave influence - allows diving to override
+		# Further reduced spring constant for better surface stability
+		var spring_constant = 80000.0 * wave_influence  # N/m - reduced for stability
+		var damping = 60000.0 * wave_influence  # Reduced damping
+		
+		var spring_force = surface_error * spring_constant
+		var damping_force = -submarine_body.linear_velocity.y * damping
+		
+		submarine_body.apply_central_force(Vector3.UP * (spring_force + damping_force))
+		
+		# Apply wave-induced roll and pitch for realism (scaled by wave influence)
+		_apply_wave_motion(sub_pos, wave_height, delta, wave_influence)
+	
+	# Underwater stabilization: Apply vertical damping when deep
+	# This helps stabilize depth when submerged
+	if current_depth > 5.0:
+		var stabilization_factor = clamp((current_depth - 5.0) / 10.0, 0.0, 1.0)
+		var vertical_damping = -submarine_body.linear_velocity.y * 40000.0 * stabilization_factor
+		submarine_body.apply_central_force(Vector3.UP * vertical_damping)
+
+
+## Apply wave-induced motion (roll/pitch) when at surface
+## wave_influence: 0.0 to 1.0, how much waves affect the submarine
+func _apply_wave_motion(sub_pos: Vector3, _wave_height: float, _delta: float, wave_influence: float) -> void:
+	if not ocean_renderer or not ocean_renderer.initialized:
+		return
+	
+	if wave_influence < 0.01:
+		return
+	
+	# Sample wave heights at bow and stern to calculate pitch
+	var bow_pos = Vector2(sub_pos.x, sub_pos.z + 10.0)  # 10m forward
+	var stern_pos = Vector2(sub_pos.x, sub_pos.z - 10.0)  # 10m back
+	var port_pos = Vector2(sub_pos.x - 5.0, sub_pos.z)  # 5m left
+	var starboard_pos = Vector2(sub_pos.x + 5.0, sub_pos.z)  # 5m right
+	
+	var bow_height = ocean_renderer.get_wave_height(bow_pos)
+	var stern_height = ocean_renderer.get_wave_height(stern_pos)
+	var port_height = ocean_renderer.get_wave_height(port_pos)
+	var starboard_height = ocean_renderer.get_wave_height(starboard_pos)
+	
+	# Calculate pitch torque (bow vs stern) - scaled by wave influence
+	var pitch_diff = bow_height - stern_height
+	var pitch_torque = pitch_diff * 40000.0 * wave_influence
+	
+	# Calculate roll torque (port vs starboard) - scaled by wave influence
+	var roll_diff = port_height - starboard_height
+	var roll_torque = roll_diff * 25000.0 * wave_influence
+	
+	# Apply torques
+	submarine_body.apply_torque(Vector3(pitch_torque, 0, roll_torque))
+	
+	# Apply restoring torque to level the submarine (stronger when diving)
+	var restore_factor = 1.0 - wave_influence  # Stronger restoration when diving
+	if restore_factor > 0.1:
+		var current_rotation = submarine_body.rotation
+		var restore_torque = Vector3(
+			-current_rotation.x * 20000.0 * restore_factor,
+			0,
+			-current_rotation.z * 20000.0 * restore_factor
+		)
+		submarine_body.apply_torque(restore_torque)
 
 ## Apply hydrodynamic drag based on velocity squared
 ## Validates: Requirements 11.3
@@ -109,47 +249,215 @@ func apply_drag(_delta: float) -> void:
 	if speed < 0.01:
 		return  # No drag at very low speeds
 	
-	# Calculate drag force: F_drag = 0.5 * ρ * v^2 * C_d * A
-	# Simplified: F_drag = k * v^2 where k includes all constants
-	var depth = simulation_state.submarine_depth
+	# Get submarine's forward direction
+	# Forward direction: rotation.y=0 means facing -Z (North in our coordinate system)
+	var forward_direction = Vector3(
+		sin(submarine_body.rotation.y),
+		0.0,
+		-cos(submarine_body.rotation.y)
+	)
 	
-	# Water density increases slightly with depth (simplified)
-	var depth_density_factor = 1.0 + (depth / 1000.0) * 0.05
+	# Calculate velocity components relative to submarine orientation
+	var velocity_2d = Vector2(velocity.x, velocity.z)
+	var forward_2d = Vector2(forward_direction.x, forward_direction.z)
 	
-	# Drag force magnitude
-	var drag_magnitude = 0.5 * WATER_DENSITY * depth_density_factor * speed * speed * DRAG_COEFFICIENT * 100.0
+	# Speed along submarine's length (forward/backward)
+	var forward_speed = velocity_2d.dot(forward_2d)
 	
-	# Apply drag force opposite to velocity direction
+	# Speed perpendicular to submarine (sideways)
+	var right_2d = Vector2(-forward_2d.y, forward_2d.x)
+	var sideways_speed = abs(velocity_2d.dot(right_2d))
+	
+	# Drag coefficients - configurable per submarine class
+	var forward_drag_coef = forward_drag
+	var sideways_drag_coef = sideways_drag
+	
+	# Calculate drag for each component
+	var forward_drag_force = forward_drag_coef * abs(forward_speed) * forward_speed
+	var sideways_drag_force = sideways_drag_coef * sideways_speed * sideways_speed
+	
+	# Total drag magnitude
+	var drag_magnitude = abs(forward_drag_force) + sideways_drag_force
+	
+	# Apply drag as a force (not velocity change!)
 	var drag_force = -velocity.normalized() * drag_magnitude
 	submarine_body.apply_central_force(drag_force)
 
 ## Apply propulsion force to reach target speed
+## Propulsion always pushes along the submarine's longitudinal axis
 ## Validates: Requirements 11.4
 func apply_propulsion(delta: float) -> void:
 	if not submarine_body or not simulation_state:
 		return
 	
-	var current_speed = submarine_body.linear_velocity.length()
 	var target_speed = simulation_state.target_speed
+	var target_heading = simulation_state.target_heading
+	
+	# Get submarine's current forward direction from transform basis (NOT from rotation.y)
+	# This ensures we match the actual model orientation
+	var forward_direction = -submarine_body.global_transform.basis.z
+	
+	# DEBUG: Verify this matches what we expect
+	var body_heading_rad = submarine_body.rotation.y
+	print("PROPULSION: rot.y=%.3f° fwd_from_basis=(%.3f,%.3f,%.3f)" % [
+		rad_to_deg(body_heading_rad),
+		forward_direction.x, forward_direction.y, forward_direction.z
+	])
+	
+	# Calculate current speed along submarine's axis
+	var current_velocity = submarine_body.linear_velocity
+	var speed_along_axis = current_velocity.dot(forward_direction)
 	
 	# Calculate speed error
-	var speed_error = target_speed - current_speed
+	var speed_error = target_speed - speed_along_axis
 	
-	# Proportional control for propulsion
-	var propulsion_ratio = clamp(speed_error / MAX_SPEED, -1.0, 1.0)
+	# PID controller for propulsion with feedforward drag compensation
+	# P term: proportional to error
+	var kp = 1.5  # Proportional gain (increased for stronger response)
+	var propulsion_force = kp * speed_error * propulsion_force_max / max_speed
 	
-	# Smooth propulsion force changes
-	var target_propulsion = propulsion_ratio * PROPULSION_FORCE_MAX
-	current_propulsion_force = lerp(current_propulsion_force, target_propulsion, delta / PROPULSION_RESPONSE_TIME)
+	# Add feedforward term to counteract drag at target speed
+	# This ensures we maintain speed even when error is small
+	var drag_compensation = target_speed * abs(target_speed) * forward_drag
+	if target_speed > 0:
+		propulsion_force += drag_compensation
+	elif target_speed < 0:
+		propulsion_force -= drag_compensation
 	
-	# Apply propulsion force in heading direction
-	var heading_rad = deg_to_rad(simulation_state.submarine_heading)
-	var forward_direction = Vector3(sin(heading_rad), 0.0, cos(heading_rad))
+	# Clamp total force
+	propulsion_force = clamp(propulsion_force, -propulsion_force_max * 0.5, propulsion_force_max)
 	
-	submarine_body.apply_central_force(forward_direction * current_propulsion_force)
+	# Safety check for NaN or infinite values
+	if is_nan(propulsion_force) or is_inf(propulsion_force):
+		propulsion_force = 0.0
 	
-	# Apply turning force based on speed (slower = tighter turns)
-	_apply_turning_force(delta)
+	# Calculate the actual force vector being applied
+	var force_vector = forward_direction * propulsion_force
+	
+	# Apply force at center of mass, along submarine's forward direction
+	submarine_body.apply_central_force(force_vector)
+	
+	# CRITICAL DEBUG: Verify force was applied
+	if int(Time.get_ticks_msec() / 500.0) % 4 == 0:
+		var frame_count = Engine.get_process_frames()
+		if frame_count % 30 == 0:
+			var vel_after = submarine_body.linear_velocity
+			print("FORCE APPLICATION: force_vec=(%.0f,%.0f,%.0f) vel_after=(%.2f,%.2f,%.2f)" % [
+				force_vector.x, force_vector.y, force_vector.z,
+				vel_after.x, vel_after.y, vel_after.z
+			])
+	
+	# Apply turning torque to steer toward target heading
+	_apply_steering_torque(target_heading, speed_along_axis, delta)
+	
+	# Debug: Print movement info occasionally
+	if int(Time.get_ticks_msec() / 1000.0) % 2 == 0:
+		var frame_count = Engine.get_process_frames()
+		if frame_count % 120 == 0:  # Every 2 seconds
+			var body_heading_deg = rad_to_deg(body_heading_rad)
+			while body_heading_deg < 0:
+				body_heading_deg += 360.0
+			while body_heading_deg >= 360:
+				body_heading_deg -= 360.0
+			print("Propulsion: speed=%.1f/%.1f force=%.0fN body_heading=%.0f° target=%.0f° fwd_dir=(%.2f,%.2f) FORCE_VECTOR=(%.0f,%.0f,%.0f)" % [
+				speed_along_axis, target_speed, propulsion_force, 
+				body_heading_deg, target_heading, forward_direction.x, forward_direction.z,
+				force_vector.x, force_vector.y, force_vector.z
+			])
+
+
+## Apply steering torque to turn submarine toward target heading
+## Uses rudder physics: turning force proportional to speed and rudder angle
+func _apply_steering_torque(target_heading: float, current_speed: float, delta: float) -> void:
+	if not submarine_body:
+		return
+	
+	# Calculate heading error
+	var current_heading_rad = submarine_body.rotation.y
+	var target_heading_rad = deg_to_rad(target_heading)
+	var heading_error = target_heading_rad - current_heading_rad
+	
+	# Normalize to [-PI, PI] - take shortest path
+	while heading_error > PI:
+		heading_error -= TAU
+	while heading_error < -PI:
+		heading_error += TAU
+	
+	# If error is very close to ±180°, pick a direction consistently
+	if abs(abs(heading_error) - PI) < 0.1:  # Within ~6° of 180°
+		# Always turn right (positive) when ambiguous
+		heading_error = abs(heading_error)
+	
+	# Calculate rudder angle based on heading error (max ±30°)
+	var max_rudder_angle = deg_to_rad(30.0)
+	var rudder_angle = clamp(heading_error, -max_rudder_angle, max_rudder_angle)
+	
+	# Rudder force at stern (turning force)
+	# Proportional to speed² and rudder angle
+	var speed_factor = abs(current_speed) * abs(current_speed)
+	var rudder_force = speed_factor * rudder_angle * rudder_effectiveness
+	
+	# Apply rudder force at stern (10m behind center)
+	var stern_offset = Vector3(0, 0, 10)  # 10m back from center
+	var stern_position = submarine_body.global_transform.basis * stern_offset
+	
+	# Force is perpendicular to submarine axis (sideways at stern)
+	# Right direction in submarine's local space (perpendicular to forward)
+	var body_heading_rad = submarine_body.rotation.y
+	var sideways_direction = Vector3(-cos(body_heading_rad), 0, sin(body_heading_rad))
+	var rudder_force_vector = sideways_direction * rudder_force
+	
+	# Apply rudder force at stern
+	submarine_body.apply_force(rudder_force_vector, stern_position)
+	
+	# Forward stabilizers (fairwater planes) - resist rotation
+	# These create opposing force when submarine is rotating
+	var angular_velocity = submarine_body.angular_velocity.y
+	if abs(angular_velocity) > 0.01:
+		# Stabilizer force opposes rotation, proportional to speed and angular velocity
+		var stabilizer_force = -speed_factor * angular_velocity * stabilizer_effectiveness
+		
+		# Apply at bow (forward position, 8m ahead of center)
+		var bow_offset = Vector3(0, 0, -8)  # 8m forward
+		var bow_position = submarine_body.global_transform.basis * bow_offset
+		var stabilizer_force_vector = sideways_direction * stabilizer_force
+		
+		submarine_body.apply_force(stabilizer_force_vector, bow_position)
+	
+	# Mid-body stabilizers - provide damping to prevent oscillation
+	# These resist any sideways velocity (slip angle)
+	var velocity_2d = Vector2(submarine_body.linear_velocity.x, submarine_body.linear_velocity.z)
+	var forward_2d = Vector2(sin(body_heading_rad), -cos(body_heading_rad))
+	var right_2d = Vector2(forward_2d.y, -forward_2d.x)
+	var sideways_velocity = velocity_2d.dot(right_2d)
+	
+	if abs(sideways_velocity) > 0.1:
+		# Stabilizer opposes sideways motion - very strong to eliminate slip
+		var mid_stabilizer_force = -sideways_velocity * abs(current_speed) * mid_stabilizer_effectiveness
+		var mid_stabilizer_vector = sideways_direction * mid_stabilizer_force
+		
+		# Apply at center of mass (no torque, just damping)
+		submarine_body.apply_central_force(mid_stabilizer_vector)
+	
+	# Optional: Thrust vectoring (small lateral component to propulsion)
+	if abs(current_speed) > 1.0:
+		var thrust_vector_force = sideways_direction * rudder_angle * 100000.0
+		submarine_body.apply_force(thrust_vector_force, stern_position)
+	
+	# Debug: Print steering info occasionally
+	if abs(heading_error) > 0.1:  # Only when actually turning
+		if int(Time.get_ticks_msec() / 1000.0) % 2 == 0:
+			var frame_count = Engine.get_process_frames()
+			if frame_count % 120 == 0:  # Every 2 seconds
+				var body_heading_deg = rad_to_deg(current_heading_rad)
+				while body_heading_deg < 0:
+					body_heading_deg += 360.0
+				while body_heading_deg >= 360:
+					body_heading_deg -= 360.0
+				print("Rudder: body=%.0f° target=%.0f° error=%.1f° rudder=%.1f° ang_vel=%.3f slip=%.2f" % [
+					body_heading_deg, target_heading, rad_to_deg(heading_error), 
+					rad_to_deg(rudder_angle), angular_velocity, sideways_velocity
+				])
 
 ## Apply turning force based on speed-dependent maneuverability
 ## Validates: Requirements 11.4
@@ -157,10 +465,11 @@ func _apply_turning_force(delta: float) -> void:
 	if not submarine_body or not simulation_state:
 		return
 	
-	var current_speed = submarine_body.linear_velocity.length()
+	var current_velocity = submarine_body.linear_velocity
+	var speed = current_velocity.length()
 	
 	# Calculate current heading from velocity
-	var velocity_2d = Vector2(submarine_body.linear_velocity.x, submarine_body.linear_velocity.z)
+	var velocity_2d = Vector2(current_velocity.x, current_velocity.z)
 	if velocity_2d.length() < 0.1:
 		return  # No turning at very low speeds
 	
@@ -173,8 +482,8 @@ func _apply_turning_force(delta: float) -> void:
 	while current_heading_deg >= 360:
 		current_heading_deg -= 360.0
 	
-	# Calculate heading error
-	var target_heading = simulation_state.submarine_heading
+	# Calculate heading error (use TARGET heading)
+	var target_heading = simulation_state.target_heading
 	var heading_error = target_heading - current_heading_deg
 	
 	# Normalize heading error to [-180, 180]
@@ -184,8 +493,9 @@ func _apply_turning_force(delta: float) -> void:
 		heading_error += 360
 	
 	# Calculate turn rate based on speed (inverse relationship)
-	var speed_ratio = clamp(current_speed / MAX_SPEED, 0.0, 1.0)
-	var max_turn_rate = lerp(TURN_RATE_SLOW, TURN_RATE_FAST, speed_ratio)
+	# Use absolute speed for turn rate calculation
+	var speed_ratio = clamp(abs(speed) / max_speed, 0.0, 1.0)
+	var max_turn_rate = lerp(turn_rate_slow, turn_rate_fast, speed_ratio)
 	
 	# Apply turn rate limit
 	var turn_amount = clamp(heading_error, -max_turn_rate * delta, max_turn_rate * delta)
@@ -207,26 +517,68 @@ func apply_depth_control(delta: float) -> void:
 	# Calculate depth error
 	var depth_error = target_depth - current_depth
 	
-	# Proportional control for ballast
-	var ballast_ratio = clamp(depth_error / 50.0, -1.0, 1.0)  # 50m is the control range
+	# PID control parameters - tuned for critically damped response
+	const KP: float = 0.3  # Proportional gain - reduced significantly for stability
+	const KI: float = 0.005  # Integral gain - very small to prevent windup
+	const KD: float = 1.2   # Derivative gain - increased for better damping
 	
-	# Smooth ballast force changes
-	var target_ballast = ballast_ratio * BALLAST_FORCE_MAX
-	current_ballast_force = lerp(current_ballast_force, target_ballast, delta / DEPTH_CONTROL_RESPONSE_TIME)
+	# Apply dead zone to prevent oscillation near target
+	const DEAD_ZONE: float = 1.5  # meters - increased dead zone
+	var effective_error = depth_error
+	if abs(depth_error) < DEAD_ZONE:
+		effective_error = 0.0  # Complete stop in dead zone
+		depth_error_integral = 0.0  # Reset integral when in dead zone
 	
-	# Apply vertical force (negative = down, positive = up)
-	# Ballast force is negative to go down, positive to go up
+	# Update integral term (with windup protection)
+	depth_error_integral += effective_error * delta
+	depth_error_integral = clamp(depth_error_integral, -100.0, 100.0)  # Prevent windup
+	
+	# Calculate derivative term (use velocity for better stability)
+	var depth_rate = -submarine_body.linear_velocity.y  # Rate of depth change
+	var desired_rate = clamp(effective_error * 0.1, -depth_change_rate, depth_change_rate)
+	var rate_error = desired_rate - depth_rate
+	
+	# PID output using rate-based derivative
+	var pid_output = KP * effective_error + KI * depth_error_integral + KD * rate_error
+	
+	# Convert PID output to ballast ratio (clamp to reasonable range)
+	var ballast_ratio = clamp(pid_output / 30.0, -1.0, 1.0)  # Normalize to [-1, 1]
+	
+	# Smooth ballast force changes with faster response
+	var target_ballast = ballast_ratio * ballast_force_max
+	current_ballast_force = lerp(current_ballast_force, target_ballast, delta / (depth_control_response_time * 0.5))
+	
+	# Apply vertical force (positive ballast_force = dive down)
 	submarine_body.apply_central_force(Vector3.DOWN * current_ballast_force)
 	
+	# Enhanced vertical damping for stability - critical for preventing oscillation
+	var vertical_velocity = submarine_body.linear_velocity.y
+	var damping_force = -vertical_velocity * 80000.0  # Increased damping significantly
+	submarine_body.apply_central_force(Vector3.UP * damping_force)
+	
+	# Apply pitch for diving/surfacing (submarines pitch down to dive, up to surface)
+	# Only apply pitch when outside dead zone
+	if abs(depth_error) > DEAD_ZONE * 2.0:  # Only pitch if significant depth change needed
+		var pitch_for_depth = clamp(depth_error / 150.0, -0.1, 0.1)  # Reduced max pitch (5.7 degrees)
+		var current_pitch = submarine_body.rotation.x
+		var pitch_error = pitch_for_depth - current_pitch
+		var pitch_torque = pitch_error * 30000.0  # Further reduced torque
+		submarine_body.apply_torque(Vector3(pitch_torque, 0, 0))
+	else:
+		# Level out when near target depth
+		var current_pitch = submarine_body.rotation.x
+		var level_torque = -current_pitch * 40000.0
+		submarine_body.apply_torque(Vector3(level_torque, 0, 0))
+	
 	# Clamp depth to operational limits
-	if current_depth < 0.0:
+	if current_depth < -2.0:  # Allow slight surfacing above water
 		# Force submarine to stay at or below surface
-		submarine_body.global_position.y = min(submarine_body.global_position.y, 0.0)
-		if submarine_body.linear_velocity.y > 0:
-			submarine_body.linear_velocity.y = 0
-	elif current_depth > MAX_DEPTH:
+		submarine_body.global_position.y = min(submarine_body.global_position.y, 2.0)
+		if submarine_body.linear_velocity.y > 0 and current_depth < 0:
+			submarine_body.linear_velocity.y *= 0.3  # More aggressive damping at surface
+	elif current_depth > max_depth:
 		# Emergency surface if exceeding max depth
-		submarine_body.global_position.y = -MAX_DEPTH
+		submarine_body.global_position.y = -max_depth
 		if submarine_body.linear_velocity.y < 0:
 			submarine_body.linear_velocity.y = 0
 		push_warning("Submarine exceeded maximum depth!")
@@ -237,10 +589,18 @@ func update_physics(delta: float) -> void:
 	if not submarine_body:
 		return
 	
-	# Apply all physics forces
+	# Debug: Check if called multiple times
+	var frame = Engine.get_process_frames()
+	if not has_meta("last_physics_frame"):
+		set_meta("last_physics_frame", frame)
+	elif get_meta("last_physics_frame") == frame:
+		push_warning("update_physics called MULTIPLE TIMES in frame %d!" % frame)
+	set_meta("last_physics_frame", frame)
+	
+	# Apply all physics systems
 	apply_buoyancy(delta)
 	apply_drag(delta)
-	apply_propulsion(delta)
+	apply_propulsion(delta)  # Now uses velocity manipulation
 	apply_depth_control(delta)
 
 ## Get current submarine state for synchronization
@@ -254,21 +614,19 @@ func get_submarine_state() -> Dictionary:
 	# Calculate depth (negative Y position)
 	var depth = -pos.y
 	
-	# Calculate speed
-	var speed = vel.length()
+	# Calculate horizontal speed (exclude vertical component)
+	var horizontal_velocity = Vector2(vel.x, vel.z)
+	var speed = horizontal_velocity.length()
 	
-	# Calculate heading from velocity
-	var velocity_2d = Vector2(vel.x, vel.z)
-	var heading = 0.0
-	if velocity_2d.length() > 0.1:
-		heading = rad_to_deg(atan2(velocity_2d.x, velocity_2d.y))
-		while heading < 0:
-			heading += 360.0
-		while heading >= 360:
-			heading -= 360.0
-	else:
-		# Use simulation state heading if not moving
-		heading = simulation_state.submarine_heading if simulation_state else 0.0
+	# Calculate heading from actual forward direction (from transform basis)
+	var forward_dir = -submarine_body.global_transform.basis.z
+	var heading = rad_to_deg(atan2(forward_dir.x, -forward_dir.z))
+	
+	# Normalize to 0-360 range
+	while heading < 0:
+		heading += 360.0
+	while heading >= 360:
+		heading -= 360.0
 	
 	return {
 		"position": pos,
