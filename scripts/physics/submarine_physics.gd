@@ -599,14 +599,6 @@ func update_physics(delta: float) -> void:
 	if not submarine_body:
 		return
 	
-	# Debug: Check if called multiple times
-	var frame = Engine.get_process_frames()
-	if not has_meta("last_physics_frame"):
-		set_meta("last_physics_frame", frame)
-	elif get_meta("last_physics_frame") == frame:
-		push_warning("update_physics called MULTIPLE TIMES in frame %d!" % frame)
-	set_meta("last_physics_frame", frame)
-	
 	# Apply all physics systems
 	apply_buoyancy(delta)
 	apply_drag(delta)
