@@ -65,7 +65,7 @@ func _setup_sealife() -> void:
 	# Find ocean renderer
 	var ocean_nodes = get_tree().get_nodes_in_group("ocean_renderer")
 	if ocean_nodes.size() > 0:
-		ocean_renderer = ocean_nodes[0]
+		ocean_renderer = ocean_nodes[0] as OceanRenderer
 	else:
 		push_warning("SealifeRenderer: No ocean renderer found, foam culling disabled")
 	
@@ -216,7 +216,12 @@ func _process(delta: float) -> void:
 
 func _animate_fish(delta: float) -> void:
 	"""Animate fish swimming motion"""
-	for i in range(fish_count):
+	# Guard against empty arrays (can happen if called before initialization)
+	var count = mini(mini(_fish_positions.size(), _fish_velocities.size()), mini(_fish_scales.size(), _fish_wave_offsets.size()))
+	if count == 0:
+		return
+	
+	for i in range(count):
 		# Update position based on velocity
 		_fish_positions[i] += _fish_velocities[i] * delta
 		
@@ -247,7 +252,8 @@ func _update_fish_transforms() -> void:
 	if not fish_multimesh_instance or not fish_multimesh_instance.multimesh:
 		return
 	
-	for i in range(fish_count):
+	var count = _fish_positions.size()
+	for i in range(count):
 		var pos = _fish_positions[i]
 		var vel = _fish_velocities[i]
 		var scale = _fish_scales[i]
@@ -283,8 +289,9 @@ func _update_culling() -> void:
 		return
 	
 	var camera_pos = camera.global_position
+	var count = _fish_positions.size()
 	
-	for i in range(fish_count):
+	for i in range(count):
 		var fish_pos = _fish_positions[i]
 		
 		# Distance-based culling

@@ -49,16 +49,18 @@ func spawn_air_patrol(spawn_position: Vector3, patrol_route: Array[Vector3], loo
 	# Create new AI agent
 	var agent = AIAgentScript.new()
 	agent.name = "AIAgent_%d" % _next_agent_id
+	
+	# Add agent to scene first so it's in the tree
+	add_child(agent)
+	ai_agents.append(agent)
+	
+	# Now we can safely set global position and configure
 	agent.global_position = spawn_position
 	
 	# Configure agent
 	agent.set_simulation_state(simulation_state)
 	agent.set_target(submarine_node)
 	agent.set_patrol_route(patrol_route, loop)
-	
-	# Add agent to scene
-	add_child(agent)
-	ai_agents.append(agent)
 	
 	# Register agent as a contact in simulation state
 	if simulation_state:

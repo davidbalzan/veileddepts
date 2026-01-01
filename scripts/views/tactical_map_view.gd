@@ -74,6 +74,14 @@ func _ready() -> void:
 
 ## Create all UI elements for the tactical map
 func _create_ui_elements() -> void:
+	# Create background to cover 3D world
+	var background = ColorRect.new()
+	background.name = "Background"
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.color = Color(0.05, 0.1, 0.15, 1.0)  # Dark blue-grey
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(background)
+	
 	# Create map canvas for drawing (full screen)
 	map_canvas = Control.new()
 	map_canvas.name = "MapCanvas"

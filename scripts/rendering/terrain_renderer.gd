@@ -653,6 +653,13 @@ func load_heightmap_from_file(path: String, region: Rect2 = Rect2(0, 0, 1, 1)) -
 	var image = Image.new()
 	var error = image.load(path)
 	
+	# If that failed with a warning or error, try direct load (useful for some Godot versions)
+	if error != OK:
+		var tex = load(path)
+		if tex:
+			image = tex.get_image()
+			error = OK
+	
 	if error != OK:
 		push_error("TerrainRenderer: Failed to load heightmap from " + path)
 		return false
@@ -747,6 +754,12 @@ func regenerate_terrain() -> void:
 	"""Regenerate terrain mesh and collision after heightmap change"""
 	if not heightmap:
 		return
+	
+	# Update material parameters if they exist
+	if terrain_material:
+		terrain_material.set_shader_parameter("terrain_size", Vector2(terrain_size.x, terrain_size.y))
+		terrain_material.set_shader_parameter("height_scale", max_height - min_height)
+		terrain_material.set_shader_parameter("min_height", min_height)
 	
 	# Regenerate LOD meshes
 	_generate_lod_meshes()

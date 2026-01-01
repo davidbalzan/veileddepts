@@ -1,22 +1,23 @@
-[gd_scene load_steps=15 format=3 uid="uid://b8qvxj3yvwxqy"]
+[gd_scene load_steps=20 format=3 uid="uid://b8qvxj3yvwxqy"]
 
 [ext_resource type="Script" uid="uid://ci1os4r75yo66" path="res://scripts/core/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://bxpqklmqxolv" path="res://scripts/core/view_manager.gd" id="2_view_manager"]
 [ext_resource type="Script" uid="uid://co5k6paec85qe" path="res://scripts/core/simulation_state.gd" id="3_simulation_state"]
 [ext_resource type="Script" uid="uid://bonn7y56oylpb" path="res://scripts/core/input_system.gd" id="4_input_system"]
 [ext_resource type="Script" uid="uid://cq10dv4xv3w13" path="res://scripts/core/audio_system.gd" id="5_audio_system"]
-[ext_resource type="Script" path="res://scripts/core/sonar_system.gd" id="5_sonar_system"]
-[ext_resource type="Script" uid="uid://cdi3xqqu5gv5a" path="res://scripts/views/tactical_map_view.gd" id="6_tactical_map_view"]
-[ext_resource type="Script" uid="uid://cnmtxr4ew0gvu" path="res://scripts/views/periscope_view.gd" id="7_periscope_view"]
-[ext_resource type="Script" uid="uid://83rgf3sal42u" path="res://scripts/rendering/ocean_renderer.gd" id="8_ocean_renderer"]
-[ext_resource type="Script" uid="uid://cc7itej7nfv8i" path="res://scripts/debug/ocean_debug_ui.gd" id="9_ocean_debug_ui"]
-[ext_resource type="Script" uid="uid://r666wck4nojq" path="res://scripts/views/external_view.gd" id="10_external_view"]
-[ext_resource type="Script" uid="uid://b81t5wehp424s" path="res://scripts/core/fog_of_war_system.gd" id="11_fog_of_war"]
-[ext_resource type="Script" uid="uid://buikkaxxcqhyb" path="res://scripts/rendering/atmosphere_renderer.gd" id="12_atmosphere_renderer"]
-[ext_resource type="Script" path="res://scripts/rendering/terrain_renderer.gd" id="13_terrain_renderer"]
-[ext_resource type="Script" path="res://scripts/rendering/sealife_renderer.gd" id="14_sealife_renderer"]
-[ext_resource type="Script" path="res://scripts/ai/ai_system.gd" id="15_ai_system"]
-[ext_resource type="Script" path="res://scripts/debug/submarine_tuning_panel.gd" id="16_tuning_panel"]
+[ext_resource type="Script" path="res://scripts/core/sonar_system.gd" id="6_sonar_system"]
+[ext_resource type="Script" uid="uid://cdi3xqqu5gv5a" path="res://scripts/views/tactical_map_view.gd" id="7_tactical_map_view"]
+[ext_resource type="Script" uid="uid://cnmtxr4ew0gvu" path="res://scripts/views/periscope_view.gd" id="8_periscope_view"]
+[ext_resource type="Script" uid="uid://83rgf3sal42u" path="res://scripts/rendering/ocean_renderer.gd" id="9_ocean_renderer"]
+[ext_resource type="Script" uid="uid://cc7itej7nfv8i" path="res://scripts/debug/ocean_debug_ui.gd" id="10_ocean_debug_ui"]
+[ext_resource type="Script" uid="uid://r666wck4nojq" path="res://scripts/views/external_view.gd" id="11_external_view"]
+[ext_resource type="Script" uid="uid://b81t5wehp424s" path="res://scripts/core/fog_of_war_system.gd" id="12_fog_of_war"]
+[ext_resource type="Script" uid="uid://buikkaxxcqhyb" path="res://scripts/rendering/atmosphere_renderer.gd" id="13_atmosphere_renderer"]
+[ext_resource type="Script" path="res://scripts/rendering/terrain_renderer.gd" id="14_terrain_renderer"]
+[ext_resource type="Script" path="res://scripts/rendering/sealife_renderer.gd" id="15_sealife_renderer"]
+[ext_resource type="Script" path="res://scripts/ai/ai_system.gd" id="16_ai_system"]
+[ext_resource type="Script" path="res://scripts/debug/submarine_tuning_panel.gd" id="17_tuning_panel"]
+[ext_resource type="Script" path="res://scripts/views/whole_map_view.gd" id="18_whole_map_view"]
 
 [sub_resource type="Environment" id="Environment_eb6dy"]
 background_mode = 1
@@ -39,16 +40,21 @@ script = ExtResource("4_input_system")
 script = ExtResource("5_audio_system")
 
 [node name="SonarSystem" type="Node" parent="."]
-script = ExtResource("5_sonar_system")
+script = ExtResource("6_sonar_system")
 
 [node name="FogOfWarSystem" type="Node" parent="."]
-script = ExtResource("11_fog_of_war")
+script = ExtResource("12_fog_of_war")
 
 [node name="AISystem" type="Node" parent="."]
-script = ExtResource("15_ai_system")
+script = ExtResource("16_ai_system")
 
 [node name="TacticalMapView" type="CanvasLayer" parent="."]
-script = ExtResource("6_tactical_map_view")
+script = ExtResource("7_tactical_map_view")
+
+[node name="WholeMapView" type="CanvasLayer" parent="."]
+layer = 10
+visible = false
+script = ExtResource("18_whole_map_view")
 
 [node name="Camera2D" type="Camera2D" parent="TacticalMapView"]
 anchor_mode = 0
@@ -56,7 +62,7 @@ zoom = Vector2(0.5, 0.5)
 
 [node name="PeriscopeView" type="Node3D" parent="."]
 visible = false
-script = ExtResource("7_periscope_view")
+script = ExtResource("8_periscope_view")
 
 [node name="Camera3D" type="Camera3D" parent="PeriscopeView"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 0)
@@ -71,7 +77,7 @@ Press 1, 2, 3 to switch views"
 
 [node name="ExternalView" type="Node3D" parent="."]
 visible = true
-script = ExtResource("10_external_view")
+script = ExtResource("11_external_view")
 
 [node name="Camera3D" type="Camera3D" parent="ExternalView"]
 transform = Transform3D(1, 0, 0, 0, 0.939693, 0.34202, 0, -0.34202, 0.939693, 0, 8, -15)
@@ -112,12 +118,16 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
 size = Vector3(2.0, 2.0, 0.3)
 
 [node name="OceanRenderer" type="Node3D" parent="." groups=["ocean_renderer"]]
-script = ExtResource("8_ocean_renderer")
+script = ExtResource("9_ocean_renderer")
+wind_speed = 30.0
 wind_direction_degrees = 45.0
 choppiness = 1.5
+fft_resolution_index = 1
+lod_level = 6
+quad_size = 16384.0
 
 [node name="TerrainRenderer" type="Node3D" parent="." groups=["terrain_renderer"]]
-script = ExtResource("13_terrain_renderer")
+script = ExtResource("14_terrain_renderer")
 terrain_size = Vector2i(2048, 2048)
 terrain_resolution = 256
 max_height = 100.0
@@ -131,7 +141,7 @@ heightmap_region = Rect2(0.25, 0.3, 0.1, 0.1)
 use_external_heightmap = true
 
 [node name="SealifeRenderer" type="Node3D" parent="."]
-script = ExtResource("14_sealife_renderer")
+script = ExtResource("15_sealife_renderer")
 max_render_distance = 200.0
 foam_culling_threshold = 0.5
 fish_count = 100
@@ -139,14 +149,14 @@ spawn_radius = 150.0
 
 [node name="AtmosphereRenderer" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_eb6dy")
-script = ExtResource("12_atmosphere_renderer")
+script = ExtResource("13_atmosphere_renderer")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 50, 0)
 light_energy = 1.5
 
 [node name="OceanDebugUI" type="CanvasLayer" parent="."]
-script = ExtResource("9_ocean_debug_ui")
+script = ExtResource("10_ocean_debug_ui")
 
 [node name="SubmarineTuningPanel" type="CanvasLayer" parent="."]
-script = ExtResource("16_tuning_panel")
+script = ExtResource("17_tuning_panel")

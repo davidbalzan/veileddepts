@@ -5,7 +5,7 @@ class_name ViewManager
 ## Coordinates view transitions and maintains simulation consistency.
 ## Ensures view transitions complete within 100ms as per requirements.
 
-enum ViewType { TACTICAL_MAP, PERISCOPE, EXTERNAL }
+enum ViewType { TACTICAL_MAP, PERISCOPE, EXTERNAL, WHOLE_MAP }
 
 ## Current active view
 var current_view: ViewType = ViewType.TACTICAL_MAP
@@ -19,6 +19,7 @@ var external_camera: Camera3D
 var tactical_map_view: CanvasLayer
 var periscope_view: Node3D
 var external_view: Node3D
+var whole_map_view: CanvasLayer
 
 ## Reference to simulation state for camera positioning
 var simulation_state: SimulationState
@@ -75,6 +76,13 @@ func _find_camera_references() -> void:
 	else:
 		push_error("ViewManager: ExternalView node not found")
 	
+	# Find whole map view
+	var whole_map_node = main_node.get_node_or_null("WholeMapView")
+	if whole_map_node:
+		whole_map_view = whole_map_node
+	else:
+		push_error("ViewManager: WholeMapView node not found")
+	
 	# Find simulation state
 	simulation_state = main_node.get_node_or_null("SimulationState")
 	if not simulation_state:
@@ -87,9 +95,9 @@ func switch_to_view(view: ViewType) -> void:
 	# Start transition timing
 	_transition_start_time = Time.get_ticks_msec()
 	
-	# Validate view type
-	if view < ViewType.TACTICAL_MAP or view > ViewType.EXTERNAL:
-		push_error("ViewManager: Invalid view type %d" % view)
+	# Validate view type - WHOLE_MAP is the highest valid enum (3)
+	if int(view) < 0 or int(view) > ViewType.WHOLE_MAP:
+		push_error("ViewManager: Invalid view type %d (max is %d)" % [view, ViewType.WHOLE_MAP])
 		return
 	
 	# Don't switch if already in target view
@@ -135,6 +143,10 @@ func _deactivate_all_views() -> void:
 		external_camera.set_current(false)  # Explicitly call set_current
 	if external_view:
 		external_view.visible = false
+	
+	# Deactivate whole map
+	if whole_map_view:
+		whole_map_view.visible = false
 
 
 ## Activate the specified view
@@ -161,6 +173,10 @@ func _activate_view(view: ViewType) -> void:
 				external_view.visible = true
 			# Update camera position for orbit around submarine
 			_update_external_camera_position()
+		
+		ViewType.WHOLE_MAP:
+			if whole_map_view:
+				whole_map_view.visible = true
 
 
 ## Update periscope camera position to submarine mast position
@@ -241,6 +257,8 @@ func _view_type_to_string(view: ViewType) -> String:
 			return "PERISCOPE"
 		ViewType.EXTERNAL:
 			return "EXTERNAL"
+		ViewType.WHOLE_MAP:
+			return "WHOLE_MAP"
 	return "UNKNOWN"
 
 

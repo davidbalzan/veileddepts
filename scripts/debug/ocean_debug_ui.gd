@@ -4,48 +4,63 @@ class_name OceanDebugUI extends CanvasLayer
 
 var ocean_renderer: OceanRenderer
 var atmosphere_renderer: AtmosphereRenderer
+var terrain_renderer: TerrainRenderer
 var panel: PanelContainer
 var visible_state: bool = false
 
+# Simple 3D debug markers
+var camera_marker: MeshInstance3D
+var wave_marker: MeshInstance3D
+var debug_label: Label
+
 func _ready() -> void:
-	# Defer UI creation to ensure all nodes are ready
 	call_deferred("_deferred_setup")
 
 func _deferred_setup() -> void:
-	# Find the ocean renderer in the scene
+	print("OceanDebugUI: Starting deferred setup...")
 	_find_ocean_renderer()
+	print("OceanDebugUI: Ocean renderer found: ", ocean_renderer != null)
 	_find_atmosphere_renderer()
+	print("OceanDebugUI: Atmosphere renderer found: ", atmosphere_renderer != null)
+	_find_terrain_renderer()
+	print("OceanDebugUI: Terrain renderer found: ", terrain_renderer != null)
 	_create_ui()
+	print("OceanDebugUI: UI created, panel: ", panel != null)
+	_create_debug_markers()
+	print("OceanDebugUI: Debug markers created")
 	panel.visible = visible_state
+	print("OceanDebugUI: Panel visibility set to: ", visible_state)
+	_update_marker_visibility()
+	print("OceanDebugUI: Setup complete!")
 
 func _find_ocean_renderer() -> void:
-	# Search for OceanRenderer in the scene tree
 	var nodes = get_tree().get_nodes_in_group("ocean_renderer")
 	if nodes.size() > 0:
-		ocean_renderer = nodes[0]
+		ocean_renderer = nodes[0] as OceanRenderer
 	else:
-		# Try to find it by class
-		ocean_renderer = _find_node_by_class(get_tree().root, "OceanRenderer")
+		var found = _find_node_by_class(get_tree().root)
+		ocean_renderer = found as OceanRenderer
 
 func _find_atmosphere_renderer() -> void:
-	# Search for AtmosphereRenderer in the scene tree by group first
 	var nodes = get_tree().get_nodes_in_group("atmosphere_renderer")
 	if nodes.size() > 0:
-		atmosphere_renderer = nodes[0]
-		print("OceanDebugUI: Found AtmosphereRenderer via group")
+		atmosphere_renderer = nodes[0] as AtmosphereRenderer
 	else:
-		# Try to find it by class
-		atmosphere_renderer = _find_node_by_class_atmosphere(get_tree().root)
-		if atmosphere_renderer:
-			print("OceanDebugUI: Found AtmosphereRenderer via class search")
-		else:
-			print("OceanDebugUI: WARNING - AtmosphereRenderer not found!")
+		var found = _find_node_by_class_atmosphere(get_tree().root)
+		atmosphere_renderer = found as AtmosphereRenderer
 
-func _find_node_by_class(node: Node, class_name_str: String) -> OceanRenderer:
+func _find_terrain_renderer() -> void:
+	var nodes = get_tree().get_nodes_in_group("terrain_renderer")
+	if nodes.size() > 0:
+		terrain_renderer = nodes[0]
+	else:
+		terrain_renderer = _find_node_by_class_terrain(get_tree().root)
+
+func _find_node_by_class(node: Node) -> OceanRenderer:
 	if node is OceanRenderer:
 		return node
 	for child in node.get_children():
-		var result = _find_node_by_class(child, class_name_str)
+		var result = _find_node_by_class(child)
 		if result:
 			return result
 	return null
@@ -59,81 +74,136 @@ func _find_node_by_class_atmosphere(node: Node) -> AtmosphereRenderer:
 			return result
 	return null
 
+func _find_node_by_class_terrain(node: Node) -> TerrainRenderer:
+	if node is TerrainRenderer:
+		return node
+	for child in node.get_children():
+		var result = _find_node_by_class_terrain(child)
+		if result:
+			return result
+	return null
+
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F3:
-		visible_state = !visible_state
-		panel.visible = visible_state
+	# F3 input moved to _process for consistency with other updates
+	pass
+
+
+func _create_debug_markers() -> void:
+	# Camera marker (Red sphere)
+	camera_marker = MeshInstance3D.new()
+	var sphere = SphereMesh.new()
+	sphere.radius = 0.2
+	sphere.height = 0.4
+	camera_marker.mesh = sphere
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(1, 0, 0) # Red
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	camera_marker.material_override = mat
+	add_child(camera_marker)
+	
+	# Wave height marker (Blue sphere)
+	wave_marker = MeshInstance3D.new()
+	var sphere2 = SphereMesh.new()
+	sphere2.radius = 0.2
+	sphere2.height = 0.4
+	wave_marker.mesh = sphere2
+	var mat2 = StandardMaterial3D.new()
+	mat2.albedo_color = Color(0, 0, 1) # Blue
+	mat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	wave_marker.material_override = mat2
+	add_child(wave_marker)
+
+
+func _update_marker_visibility() -> void:
+	if camera_marker:
+		camera_marker.visible = visible_state
+	if wave_marker:
+		wave_marker.visible = visible_state
 
 func _create_ui() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(10, 10)
-	panel.custom_minimum_size = Vector2(320, 0)
+	panel.name = "OceanDebugPanel"
+	panel.custom_minimum_size = Vector2(300, 400) # Increased height
+	panel.position = Vector2(20, 20)
 	add_child(panel)
 	
-	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(main_vbox)
+	var vbox = VBoxContainer.new()
+	panel.add_child(vbox)
 	
-	# Title
+	# Header
 	var title = Label.new()
-	title.text = "Debug Panel (F3 to toggle)"
-	title.add_theme_font_size_override("font_size", 16)
-	main_vbox.add_child(title)
+	title.text = "OCEAN / TERRAIN DEBUG"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
 	
-	# Separator
-	main_vbox.add_child(HSeparator.new())
+	vbox.add_child(HSeparator.new())
 	
-	# Get initial values from ocean renderer if available
-	var init_choppiness = ocean_renderer.choppiness if ocean_renderer else 1.78
-	var init_wind_speed = ocean_renderer.wind_speed if ocean_renderer else 9.02
-	var init_jacobian = ocean_renderer.foam_jacobian_limit if ocean_renderer else 1.08
-	var init_coverage = ocean_renderer.foam_coverage if ocean_renderer else 0.13
-	var init_mix = ocean_renderer.foam_mix_strength if ocean_renderer else 1.86
-	var init_diffuse = ocean_renderer.foam_diffuse_strength if ocean_renderer else 2.22
-	var init_specular = ocean_renderer.specular_strength if ocean_renderer else 1.06
-	var init_pbr = ocean_renderer.pbr_specular_strength if ocean_renderer else 0.93
+	# Camera / Periscope Info
+	debug_label = Label.new()
+	debug_label.text = "Waiting for data..."
+	vbox.add_child(debug_label)
+	
+	vbox.add_child(HSeparator.new())
+	
+	# Get initial values
+	var init_choppiness = 1.5
+	var init_wind_speed = 30.0
+	var init_wind_dir = 45.0
+	var init_time_scale = 1.0
+	
+	if ocean_renderer:
+		init_choppiness = ocean_renderer.choppiness
+		init_wind_speed = ocean_renderer.wind_speed
+		init_wind_dir = ocean_renderer.wind_direction_degrees
+		init_time_scale = ocean_renderer.time_scale
 	
 	# Wave Settings
-	_add_section_label(main_vbox, "Wave Settings")
-	_add_slider(main_vbox, "Choppiness", 0.0, 5.0, init_choppiness, _on_choppiness_changed)
-	_add_slider(main_vbox, "Wind Speed", 0.0, 50.0, init_wind_speed, _on_wind_speed_changed)
+	_add_section_label(vbox, "Wave Settings")
+	_add_slider(vbox, "Wind Speed", 5.0, 100.0, init_wind_speed, _on_wind_speed_changed)
+	_add_slider(vbox, "Wind Direction", 0.0, 360.0, init_wind_dir, _on_wind_direction_changed)
+	_add_slider(vbox, "Choppiness", 0.0, 2.5, init_choppiness, _on_choppiness_changed)
+	_add_slider(vbox, "Time Scale", 0.1, 3.0, init_time_scale, _on_time_scale_changed)
 	
-	# Separator
-	main_vbox.add_child(HSeparator.new())
-	
-	# Foam Settings
-	_add_section_label(main_vbox, "Foam Settings")
-	_add_slider(main_vbox, "Jacobian Limit", 0.0, 2.0, init_jacobian, _on_foam_jacobian_changed)
-	_add_slider(main_vbox, "Coverage", 0.0, 2.0, init_coverage, _on_foam_coverage_changed)
-	_add_slider(main_vbox, "Mix Strength", 0.0, 5.0, init_mix, _on_foam_mix_changed)
-	_add_slider(main_vbox, "Diffuse Strength", 0.0, 3.0, init_diffuse, _on_foam_diffuse_changed)
-	
-	# Separator
-	main_vbox.add_child(HSeparator.new())
-	
-	# Specular Settings
-	_add_section_label(main_vbox, "Specular Settings")
-	_add_slider(main_vbox, "Sun Specular", 0.0, 2.0, init_specular, _on_specular_changed)
-	_add_slider(main_vbox, "PBR Specular", 0.0, 1.0, init_pbr, _on_pbr_specular_changed)
-	
-	# Separator
-	main_vbox.add_child(HSeparator.new())
+	vbox.add_child(HSeparator.new())
 	
 	# Atmosphere Settings
-	_add_section_label(main_vbox, "Atmosphere Settings")
-	var init_time = atmosphere_renderer.time_of_day if atmosphere_renderer else 12.0
-	var init_sun_energy = atmosphere_renderer.sun.light_energy if atmosphere_renderer and atmosphere_renderer.sun else 1.5
-	var init_ambient = atmosphere_renderer.environment.ambient_light_energy if atmosphere_renderer else 0.5
+	_add_section_label(vbox, "Atmosphere Settings")
+	var init_time = 12.0
+	if atmosphere_renderer:
+		init_time = atmosphere_renderer.time_of_day
+	_add_slider(vbox, "Time of Day", 0.0, 24.0, init_time, _on_time_of_day_changed)
 	
-	_add_slider(main_vbox, "Time of Day", 0.0, 24.0, init_time, _on_time_of_day_changed)
-	_add_slider(main_vbox, "Sun Brightness", 0.0, 3.0, init_sun_energy, _on_sun_brightness_changed)
-	_add_slider(main_vbox, "Ambient Light", 0.0, 2.0, init_ambient, _on_ambient_light_changed)
+	vbox.add_child(HSeparator.new())
+	
+	# Terrain Settings
+	_add_section_label(vbox, "Terrain Settings")
+	var init_max_h = 100.0
+	var init_min_h = -200.0
+	var init_size = 2048.0
+	
+	if terrain_renderer:
+		init_max_h = terrain_renderer.max_height
+		init_min_h = terrain_renderer.min_height
+		init_size = float(terrain_renderer.terrain_size.x)
+	
+	_add_slider(vbox, "Max Height", 0.0, 500.0, init_max_h, _on_max_height_changed)
+	_add_slider(vbox, "Min Height", -1000.0, 0.0, init_min_h, _on_min_height_changed)
+	_add_slider(vbox, "Scale (X=Y)", 512.0, 8192.0, init_size, _on_terrain_scale_changed)
+	
+	vbox.add_child(HSeparator.new())
 	
 	# Print values button
 	var print_btn = Button.new()
 	print_btn.text = "Print Current Values"
 	print_btn.pressed.connect(_print_values)
-	main_vbox.add_child(print_btn)
+	vbox.add_child(print_btn)
+	
+	# Add underwater status label
+	vbox.add_child(HSeparator.new())
+	var status_label = Label.new()
+	status_label.name = "StatusLabel"
+	status_label.text = "Camera Status: --"
+	vbox.add_child(status_label)
 
 func _add_section_label(parent: Control, text: String) -> void:
 	var label = Label.new()
@@ -148,7 +218,7 @@ func _add_slider(parent: Control, label_text: String, min_val: float, max_val: f
 	
 	var label = Label.new()
 	label.text = label_text
-	label.custom_minimum_size.x = 120
+	label.custom_minimum_size.x = 100
 	hbox.add_child(label)
 	
 	var slider = HSlider.new()
@@ -156,7 +226,7 @@ func _add_slider(parent: Control, label_text: String, min_val: float, max_val: f
 	slider.max_value = max_val
 	slider.step = 0.01
 	slider.value = default_val
-	slider.custom_minimum_size.x = 120
+	slider.custom_minimum_size.x = 140
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox.add_child(slider)
 	
@@ -169,74 +239,95 @@ func _add_slider(parent: Control, label_text: String, min_val: float, max_val: f
 		value_label.text = "%.2f" % val
 		callback.call(val)
 	)
-	
 	return slider
-
-
-# Callbacks for sliders
-func _on_choppiness_changed(value: float) -> void:
-	if ocean_renderer:
-		ocean_renderer.choppiness = value
 
 func _on_wind_speed_changed(value: float) -> void:
 	if ocean_renderer:
 		ocean_renderer.wind_speed = value
 
-func _on_foam_jacobian_changed(value: float) -> void:
+func _on_wind_direction_changed(value: float) -> void:
 	if ocean_renderer:
-		ocean_renderer.foam_jacobian_limit = value
+		ocean_renderer.wind_direction_degrees = value
 
-func _on_foam_coverage_changed(value: float) -> void:
+func _on_choppiness_changed(value: float) -> void:
 	if ocean_renderer:
-		ocean_renderer.foam_coverage = value
+		ocean_renderer.choppiness = value
 
-func _on_foam_mix_changed(value: float) -> void:
+func _on_time_scale_changed(value: float) -> void:
 	if ocean_renderer:
-		ocean_renderer.foam_mix_strength = value
-
-func _on_foam_diffuse_changed(value: float) -> void:
-	if ocean_renderer:
-		ocean_renderer.foam_diffuse_strength = value
-
-func _on_specular_changed(value: float) -> void:
-	if ocean_renderer:
-		ocean_renderer.specular_strength = value
-
-func _on_pbr_specular_changed(value: float) -> void:
-	if ocean_renderer:
-		ocean_renderer.pbr_specular_strength = value
+		ocean_renderer.time_scale = value
 
 func _on_time_of_day_changed(value: float) -> void:
 	if atmosphere_renderer:
 		atmosphere_renderer.set_time_of_day(value)
 
-func _on_sun_brightness_changed(value: float) -> void:
-	if atmosphere_renderer and atmosphere_renderer.sun:
-		# Store the value and let the time of day system use it as a multiplier
-		atmosphere_renderer.sun.light_energy = value
+func _on_max_height_changed(value: float) -> void:
+	if terrain_renderer:
+		terrain_renderer.max_height = value
+		terrain_renderer.regenerate_terrain()
 
-func _on_ambient_light_changed(value: float) -> void:
-	if atmosphere_renderer and atmosphere_renderer.environment:
-		atmosphere_renderer.environment.ambient_light_energy = value
+func _on_min_height_changed(value: float) -> void:
+	if terrain_renderer:
+		terrain_renderer.min_height = value
+		terrain_renderer.regenerate_terrain()
+
+func _on_terrain_scale_changed(value: float) -> void:
+	if terrain_renderer:
+		var size_int = int(value)
+		terrain_renderer.terrain_size = Vector2i(size_int, size_int)
+		terrain_renderer.regenerate_terrain()
 
 func _print_values() -> void:
 	if ocean_renderer:
-		print("=== Current Ocean Settings ===")
-		print("choppiness = ", ocean_renderer.choppiness)
+		print("=== Ocean Settings ===")
 		print("wind_speed = ", ocean_renderer.wind_speed)
-		print("foam_jacobian_limit = ", ocean_renderer.foam_jacobian_limit)
-		print("foam_coverage = ", ocean_renderer.foam_coverage)
-		print("foam_mix_strength = ", ocean_renderer.foam_mix_strength)
-		print("foam_diffuse_strength = ", ocean_renderer.foam_diffuse_strength)
-		print("specular_strength = ", ocean_renderer.specular_strength)
-		print("pbr_specular_strength = ", ocean_renderer.pbr_specular_strength)
-		print("==============================")
-	
+		print("wind_direction_degrees = ", ocean_renderer.wind_direction_degrees)
+		print("choppiness = ", ocean_renderer.choppiness)
+		print("time_scale = ", ocean_renderer.time_scale)
 	if atmosphere_renderer:
-		print("=== Current Atmosphere Settings ===")
+		print("=== Atmosphere ===")
 		print("time_of_day = ", atmosphere_renderer.time_of_day)
-		if atmosphere_renderer.sun:
-			print("sun.light_energy = ", atmosphere_renderer.sun.light_energy)
-		if atmosphere_renderer.environment:
-			print("ambient_light_energy = ", atmosphere_renderer.environment.ambient_light_energy)
-		print("=====================================")
+
+
+func _process(_delta: float) -> void:
+	# Handle toggle
+	if Input.is_action_just_pressed("debug_f3"): # Or whatever action map has
+		print("F3 pressed! Toggling debug panel from ", visible_state, " to ", not visible_state)
+		visible_state = not visible_state
+		panel.visible = visible_state
+		_update_marker_visibility()
+	
+	if not visible_state:
+		return
+		
+	var active_camera = get_viewport().get_camera_3d()
+	if not active_camera:
+		return
+		
+	var cam_pos = active_camera.global_position
+	
+	# Update camera marker
+	if camera_marker:
+		camera_marker.global_position = cam_pos
+		
+	# Calculate and update wave info
+	var wave_height = 0.0
+	var is_underwater = false
+	
+	if ocean_renderer and ocean_renderer.initialized:
+		# Get exact wave height at camera X/Z
+		wave_height = ocean_renderer.get_wave_height_3d(cam_pos)
+		is_underwater = ocean_renderer.is_position_underwater(cam_pos)
+		
+		# Update wave marker
+		if wave_marker:
+			wave_marker.global_position = Vector3(cam_pos.x, wave_height, cam_pos.z)
+	
+	# Update debug label with detailed info
+	if debug_label:
+		var delta_h = cam_pos.y - wave_height
+		var txt = "Camera Y: %.2f\n" % cam_pos.y
+		txt += "Wave Y:   %.2f\n" % wave_height
+		txt += "Delta:    %.2f m\n" % delta_h
+		txt += "Status:   %s" % ("UNDERWATER" if is_underwater else "SURFACE")
+		debug_label.text = txt

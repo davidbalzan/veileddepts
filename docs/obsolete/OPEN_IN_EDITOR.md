@@ -10,7 +10,12 @@ The shader errors are back because:
 ## Solution: Open in Editor
 
 ```bash
-godot4 project.godot
+~/utils/Godot_v4.5.1-stable_linux.x86_64 project.godot
+```
+
+Or simply:
+```bash
+godot project.godot
 ```
 
 **What will happen:**

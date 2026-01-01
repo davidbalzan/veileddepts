@@ -369,14 +369,14 @@ Each task builds on previous work, ensuring no orphaned code. The plan emphasize
     - Update audio positions relative to active camera
     - _Requirements: 14.4_
 
-- [ ] 18. Input System Integration
-  - [ ] 18.1 Implement InputSystem class
+- [x] 18. Input System Integration
+  - [x] 18.1 Implement InputSystem class
     - Create InputSystem.gd
     - Route input events to appropriate view handlers
     - Implement view toggle shortcuts (Tab, 1, 2, 3)
     - _Requirements: 15.1, 15.2, 15.3_
 
-  - [ ] 18.2 Implement input customization
+  - [x] 18.2 Implement input customization
     - Add input remapping UI
     - Save/load custom bindings to config file
     - _Requirements: 15.4_

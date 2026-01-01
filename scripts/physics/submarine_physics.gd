@@ -240,7 +240,8 @@ func apply_buoyancy(delta: float) -> void:
 	# Get wave height at submarine position
 	var wave_height: float = 0.0
 	if ocean_renderer and ocean_renderer.initialized:
-		wave_height = ocean_renderer.get_wave_height(Vector2(sub_pos.x, sub_pos.z))
+		# Use 3D position for wave height (y is ignored by ocean renderer mostly but passed for consistency)
+		wave_height = ocean_renderer.get_wave_height_3d(sub_pos)
 	
 	# Calculate water level at submarine position (wave height is relative to y=0)
 	var water_level = wave_height
@@ -322,15 +323,16 @@ func _apply_wave_motion(sub_pos: Vector3, _wave_height: float, _delta: float, wa
 		return
 	
 	# Sample wave heights at bow and stern to calculate pitch
-	var bow_pos = Vector2(sub_pos.x, sub_pos.z + 10.0)  # 10m forward
-	var stern_pos = Vector2(sub_pos.x, sub_pos.z - 10.0)  # 10m back
-	var port_pos = Vector2(sub_pos.x - 5.0, sub_pos.z)  # 5m left
-	var starboard_pos = Vector2(sub_pos.x + 5.0, sub_pos.z)  # 5m right
+	# Use Vector3 positions for get_wave_height_3d
+	var bow_pos = Vector3(sub_pos.x, 0, sub_pos.z + 10.0)  # 10m forward
+	var stern_pos = Vector3(sub_pos.x, 0, sub_pos.z - 10.0)  # 10m back
+	var port_pos = Vector3(sub_pos.x - 5.0, 0, sub_pos.z)  # 5m left
+	var starboard_pos = Vector3(sub_pos.x + 5.0, 0, sub_pos.z)  # 5m right
 	
-	var bow_height = ocean_renderer.get_wave_height(bow_pos)
-	var stern_height = ocean_renderer.get_wave_height(stern_pos)
-	var port_height = ocean_renderer.get_wave_height(port_pos)
-	var starboard_height = ocean_renderer.get_wave_height(starboard_pos)
+	var bow_height = ocean_renderer.get_wave_height_3d(bow_pos)
+	var stern_height = ocean_renderer.get_wave_height_3d(stern_pos)
+	var port_height = ocean_renderer.get_wave_height_3d(port_pos)
+	var starboard_height = ocean_renderer.get_wave_height_3d(starboard_pos)
 	
 	# Calculate pitch torque (bow vs stern) - scaled by wave influence
 	var pitch_diff = bow_height - stern_height

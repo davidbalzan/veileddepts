@@ -73,8 +73,8 @@ func _ready() -> void:
 	if not simulation_state:
 		push_error("PeriscopeView: SimulationState not found")
 	
-	# Find ocean renderer in this view
-	ocean_renderer = get_node_or_null("OceanRenderer")
+	# Find ocean renderer from main node
+	ocean_renderer = main_node.get_node_or_null("OceanRenderer")
 	if not ocean_renderer:
 		push_warning("PeriscopeView: OceanRenderer not found, underwater detection will use fixed depth")
 	
@@ -174,27 +174,41 @@ func handle_zoom_input(delta_zoom: float) -> void:
 
 
 ## Check if submarine is below periscope depth
-## Returns true if underwater rendering should be active
-## Now checks actual wave height at camera position for accurate detection
+## Uses hysteresis to prevent flickering at the surface
 func is_underwater() -> bool:
 	if not camera:
 		return false
 	
-	# Get camera position
 	var cam_pos = camera.global_position
 	
-	# If we have ocean renderer, check actual wave height at camera position
+	# Use camera position directly - forward offset caused issues with pitch
+	
+	# Get wave height directly to apply custom hysteresis
+	var wave_height = 0.0
 	if ocean_renderer and ocean_renderer.initialized:
-		var wave_height = ocean_renderer.get_wave_height_3d(cam_pos)
-		# Camera is underwater if it's below the wave surface
-		# Add small buffer (0.5m) to avoid flickering at the surface
-		return cam_pos.y < (wave_height - 0.5)
+		# Use get_wave_height_3d for accurate displacement
+		wave_height = ocean_renderer.get_wave_height_3d(cam_pos)
+	elif simulation_state:
+		# Fallback if ocean not ready
+		wave_height = 0.0 # Default sea level is 0
 	
-	# Fallback: use fixed depth check if no ocean renderer
-	if simulation_state:
-		return simulation_state.submarine_depth > PERISCOPE_DEPTH
+	# Current height of camera relative to waves
+	# Positive = above water, Negative = underwater
+	var height_above_water = cam_pos.y - wave_height
 	
-	return false
+	# Debug print (throttled)
+	# if Engine.get_process_frames() % 60 == 0:
+	# 	print("Periscope depth: %.2f, Rel height: %.2f, Mode: %s" % [cam_pos.y, height_above_water, "UW" if is_underwater_mode else "SURFACE"])
+	
+	# Hysteresis logic (tightened)
+	if is_underwater_mode:
+		# Currently underwater: stay underwater until clearly above surface
+		# Must be 0.1m above water to switch to surface mode
+		return height_above_water < 0.1
+	else:
+		# Currently surface: switch as soon as we touch water (0.0m)
+		# This gives the most responsive feel
+		return height_above_water < 0.0
 
 
 ## Apply lens effect shader to periscope view
