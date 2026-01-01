@@ -76,7 +76,18 @@ func _on_map_canvas_draw() -> void:
 	if not visible:
 		return
 	
+	if not map_canvas:
+		push_error("WholeMapView: map_canvas is null!")
+		return
+	
 	var canvas_size = map_canvas.size
+	if canvas_size.x <= 0 or canvas_size.y <= 0:
+		# Canvas not sized yet, try to force a size
+		canvas_size = get_viewport().get_visible_rect().size
+		if canvas_size.x <= 0 or canvas_size.y <= 0:
+			push_warning("WholeMapView: Canvas size is zero, skipping draw")
+			return
+	
 	var canvas_rect = Rect2(Vector2.ZERO, canvas_size)
 	
 	# Draw background ocean (dark blue)
@@ -144,6 +155,14 @@ func _draw_submarine_icon_global() -> void:
 func _process(_delta: float) -> void:
 	if visible and map_canvas:
 		map_canvas.queue_redraw()
+
+# Handle visibility changes to ensure proper redraw
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		if visible and map_canvas:
+			# Force immediate redraw when becoming visible
+			await get_tree().process_frame
+			map_canvas.queue_redraw()
 
 func _input(event: InputEvent) -> void:
 	if not visible:

@@ -780,6 +780,47 @@ func set_terrain_region(region: Rect2) -> void:
 		regenerate_terrain()
 
 
+## Set terrain region with proper Earth scale
+## This calculates the real-world size of the region and sets terrain_size accordingly
+func set_terrain_region_earth_scale(region: Rect2, max_terrain_size: int = 4096) -> void:
+	"""Set terrain region with proper Earth scale calculation
+	
+	Args:
+		region: UV region of the world map (0-1 coordinates)
+		max_terrain_size: Maximum terrain size in meters (for performance)
+	"""
+	heightmap_region = region
+	
+	# Calculate real-world size using Earth scale
+	var earth_scale_size = EarthScale.get_region_size_meters(region)
+	
+	# Clamp to max size for performance (but maintain aspect ratio)
+	var scale_factor = 1.0
+	if earth_scale_size.x > max_terrain_size or earth_scale_size.y > max_terrain_size:
+		scale_factor = max_terrain_size / max(earth_scale_size.x, earth_scale_size.y)
+	
+	var scaled_size = Vector2i(
+		int(earth_scale_size.x * scale_factor),
+		int(earth_scale_size.y * scale_factor)
+	)
+	
+	# Ensure minimum size
+	scaled_size.x = max(scaled_size.x, 256)
+	scaled_size.y = max(scaled_size.y, 256)
+	
+	terrain_size = scaled_size
+	
+	print("TerrainRenderer: Earth scale region set")
+	print("  UV Region: ", region)
+	print("  Real-world size: %.1f km x %.1f km" % [earth_scale_size.x / 1000.0, earth_scale_size.y / 1000.0])
+	print("  Terrain size (scaled): %d x %d meters" % [terrain_size.x, terrain_size.y])
+	print("  Scale factor: %.6f (1 game meter = %.1f real meters)" % [scale_factor, 1.0 / scale_factor if scale_factor > 0 else 0])
+	
+	if use_external_heightmap and external_heightmap_path != "":
+		load_heightmap_from_file(external_heightmap_path, region)
+		regenerate_terrain()
+
+
 func find_safe_spawn_position(preferred_position: Vector3 = Vector3.ZERO, search_radius: float = 500.0, min_depth: float = -50.0) -> Vector3:
 	"""Find a safe spawn position in water (below sea level, above sea floor)
 	
