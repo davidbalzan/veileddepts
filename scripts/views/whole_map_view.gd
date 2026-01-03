@@ -10,8 +10,14 @@ var tile_size: int = 2048  # Size of each tile
 var max_cached_tiles: int = 16  # Maximum number of tiles to keep in memory
 var _scaled_map_texture: ImageTexture = null  # Downscaled version for display
 var _colorizer_material: ShaderMaterial = null
-var map_background: TextureRect = null
 var icon_overlay: Control = null
+
+# State for "resample on zoom" detail texture
+var _detail_texture: ImageTexture = null
+var _detail_uv_rect: Rect2 = Rect2()
+var _last_resample_zoom: float = 1.0
+var _last_resample_pan: Vector2 = Vector2.ZERO
+var _resample_settle_timer: float = 0.0
 
 
 
@@ -211,7 +217,7 @@ func _on_map_canvas_draw() -> void:
 	if not visible or not map_canvas:
 		return
 
-	# Draw background texture directly on canvas
+	# Draw base background texture
 	if _scaled_map_texture:
 		var canvas_size = map_canvas.size
 		var img_aspect = float(global_map_image.get_width()) / global_map_image.get_height()
@@ -235,8 +241,14 @@ func _on_map_canvas_draw() -> void:
 
 		map_canvas.draw_texture_rect(_scaled_map_texture, zoomed_rect, false)
 		
-		# Debug: Draw border around map area
-		# map_canvas.draw_rect(zoomed_rect, Color(1, 1, 1, 0.3), false, 1.0)
+		# Draw detail texture overlay if available
+		if _detail_texture:
+			# Calculate screen rect for the detail texture relative to its stored UV rect
+			var detail_top_left = _uv_to_screen(_detail_uv_rect.position)
+			var detail_bottom_right = _uv_to_screen(_detail_uv_rect.position + _detail_uv_rect.size)
+			var detail_screen_rect = Rect2(detail_top_left, detail_bottom_right - detail_top_left)
+			
+			map_canvas.draw_texture_rect(_detail_texture, detail_screen_rect, false)
 
 	# Redraw overlay
 	if icon_overlay:
@@ -263,6 +275,69 @@ func _draw_missing_image_warning(canvas_rect: Rect2) -> void:
 		font_size,
 		Color.RED
 	)
+
+
+func _generate_detail_texture() -> void:
+	if not global_map_image or not visible:
+		return
+	
+	print("WholeMapView: Generating detail texture for current view...")
+	
+	# Determine current visible UV rect
+	var canvas_size = map_canvas.size
+	var uv_top_left = _screen_to_uv(Vector2.ZERO)
+	var uv_bottom_right = _screen_to_uv(canvas_size)
+	
+	# Add a margin (approx 40%) to allow for panning without immediate blanking
+	var margin = (uv_bottom_right - uv_top_left) * 0.4
+	uv_top_left -= margin
+	uv_bottom_right += margin
+	
+	# Clamp to valid UV range
+	uv_top_left.x = clamp(uv_top_left.x, 0.0, 1.0)
+	uv_top_left.y = clamp(uv_top_left.y, 0.0, 1.0)
+	uv_bottom_right.x = clamp(uv_bottom_right.x, 0.0, 1.0)
+	uv_bottom_right.y = clamp(uv_bottom_right.y, 0.0, 1.0)
+	
+	var uv_rect = Rect2(uv_top_left, uv_bottom_right - uv_top_left)
+	if uv_rect.size.x <= 0 or uv_rect.size.y <= 0:
+		return
+		
+	_detail_uv_rect = uv_rect
+	
+	# Extraction resolution (higher than base, but manageable)
+	var resolution = 512
+	var source_w = global_map_image.get_width()
+	var source_h = global_map_image.get_height()
+	
+	var detail_image = Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
+	var sea_level_threshold = 0.554
+	
+	# Extract and colorize
+	for y in range(resolution):
+		var uv_y = uv_rect.position.y + (float(y) / (resolution - 1)) * uv_rect.size.y
+		var source_y = clampi(int(uv_y * (source_h - 1)), 0, source_h - 1)
+		
+		for x in range(resolution):
+			var uv_x = uv_rect.position.x + (float(x) / (resolution - 1)) * uv_rect.size.x
+			var source_x = clampi(int(uv_x * (source_w - 1)), 0, source_w - 1)
+			
+			var val = global_map_image.get_pixel(source_x, source_y).r
+			var color: Color
+			if val <= sea_level_threshold:
+				var norm = val / sea_level_threshold
+				color = Color(0.0, 0.1 * norm, 0.2 + 0.3 * norm)
+			else:
+				var norm = (val - sea_level_threshold) / (1.0 - sea_level_threshold)
+				color = Color(0.1 + 0.3 * norm, 0.4 - 0.1 * norm, 0.1)
+				
+			detail_image.set_pixel(x, y, color)
+			
+	_detail_texture = ImageTexture.create_from_image(detail_image)
+	_last_resample_zoom = map_zoom
+	_last_resample_pan = map_pan_offset
+	
+	print("WholeMapView: Detail texture generated for UV rect %s" % uv_rect)
 
 
 
@@ -369,6 +444,20 @@ func _process(_delta: float) -> void:
 		# Update elevation info
 		_update_elevation_info()
 		
+		# Better resampling logic for World Map Detail
+		var zoom_changed = abs(map_zoom - _last_resample_zoom) / _last_resample_zoom > 0.1
+		var pan_changed = map_pan_offset.distance_to(_last_resample_pan) > (100.0 / map_zoom)
+		
+		if zoom_changed or pan_changed:
+			_resample_settle_timer = 0.4 # Default settle time
+			_last_resample_zoom = map_zoom # Update immediately to stop further increments
+			_last_resample_pan = map_pan_offset
+		
+		if _resample_settle_timer > 0:
+			_resample_settle_timer -= _delta
+			if _resample_settle_timer <= 0:
+				_generate_detail_texture()
+
 		map_canvas.queue_redraw()
 
 
