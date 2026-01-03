@@ -21,6 +21,7 @@ var deep_stabilization_coefficient: float = 5000.0  # Vertical stabilization whe
 var hull_height: float = 10.0  # Submarine hull height for submersion calculation (m)
 var surface_threshold: float = 1.0  # Depth below which submarine is considered at surface (m)
 
+
 func _init(config: Dictionary = {}):
 	if config.has("water_density"):
 		water_density = config.water_density
@@ -43,6 +44,7 @@ func _init(config: Dictionary = {}):
 	if config.has("surface_threshold"):
 		surface_threshold = config.surface_threshold
 
+
 ## Calculate buoyancy force and wave interaction
 ##
 ## Parameters:
@@ -56,57 +58,51 @@ func _init(config: Dictionary = {}):
 ##     - force: Buoyancy force vector (Vector3)
 ##     - torque: Wave-induced torque vector (Vector3)
 func calculate_buoyancy_force(
-	position: Vector3,
-	velocity: Vector3,
-	target_depth: float,
-	ocean_renderer
+	position: Vector3, velocity: Vector3, target_depth: float, ocean_renderer
 ) -> Dictionary:
-	var result = {
-		"force": Vector3.ZERO,
-		"torque": Vector3.ZERO
-	}
-	
+	var result = {"force": Vector3.ZERO, "torque": Vector3.ZERO}
+
 	# Requirement 9.1: Get wave height from ocean renderer
 	var wave_height: float = 0.0
 	if ocean_renderer and ocean_renderer.has_method("get_wave_height_3d"):
 		wave_height = ocean_renderer.get_wave_height_3d(position)
-	
+
 	# Calculate submarine's hull depth (center position relative to water surface)
 	var hull_depth: float = wave_height - position.y
-	
+
 	# Requirement 9.2: Calculate submersion ratio based on hull depth vs water surface
 	var submersion_ratio: float = _calculate_submersion_ratio(hull_depth)
-	
+
 	# Requirement 9.1: Calculate buoyancy using Archimedes' principle
 	# Buoyancy = density * volume * submersion * gravity
-	var buoyancy_force: float = water_density * submarine_volume * submersion_ratio * 9.81 * buoyancy_coefficient
-	
+	var buoyancy_force: float = (
+		water_density * submarine_volume * submersion_ratio * 9.81 * buoyancy_coefficient
+	)
+
 	# Buoyancy acts upward (positive Y)
 	result.force.y = buoyancy_force
-	
+
 	# Requirement 9.4: Calculate wave influence factor (fades with depth >10m)
 	var wave_influence: float = _calculate_wave_influence(hull_depth)
-	
+
 	# Requirement 9.3, 9.5: Apply wave interaction when at surface
 	if wave_influence > 0.01:
 		var wave_forces = _calculate_wave_interaction(
-			position,
-			velocity,
-			wave_height,
-			wave_influence
+			position, velocity, wave_height, wave_influence
 		)
 		result.force += wave_forces.force
 		result.torque += wave_forces.torque
-	
+
 	# Requirement 9.6: Apply vertical stabilization when deep
 	if hull_depth > wave_influence_depth:
 		var stabilization_force: float = -velocity.y * deep_stabilization_coefficient
 		result.force.y += stabilization_force
-	
+
 	# Requirement 9.6: Allow surfacing when target depth < 1m
 	# (This is handled by the caller, but we ensure buoyancy doesn't prevent it)
-	
+
 	return result
+
 
 ## Calculate submersion ratio based on hull depth
 ##
@@ -121,16 +117,17 @@ func _calculate_submersion_ratio(hull_depth: float) -> float:
 	# If submarine is completely above water, no buoyancy
 	if hull_depth < -hull_height * 0.5:
 		return 0.0
-	
+
 	# If submarine is completely submerged, full buoyancy
 	if hull_depth > hull_height * 0.5:
 		return 1.0
-	
+
 	# Linear interpolation for partial submersion
 	# When hull_depth = -hull_height/2 (top of hull at surface), ratio = 0
 	# When hull_depth = +hull_height/2 (bottom of hull at surface), ratio = 1
 	var ratio: float = (hull_depth + hull_height * 0.5) / hull_height
 	return clamp(ratio, 0.0, 1.0)
+
 
 ## Calculate wave influence factor based on depth
 ##
@@ -145,21 +142,22 @@ func _calculate_wave_influence(hull_depth: float) -> float:
 	# No wave influence when above water
 	if hull_depth < 0.0:
 		return 0.0
-	
+
 	# Full wave influence at surface
 	if hull_depth < surface_threshold:
 		return 1.0
-	
+
 	# Requirement 9.4: Fade wave influence from surface to wave_influence_depth
 	if hull_depth >= wave_influence_depth:
 		return 0.0
-	
+
 	# Linear fade from 1.0 at surface_threshold to 0.0 at wave_influence_depth
 	var fade_range: float = wave_influence_depth - surface_threshold
 	var depth_in_range: float = hull_depth - surface_threshold
 	var influence: float = 1.0 - (depth_in_range / fade_range)
-	
+
 	return clamp(influence, 0.0, 1.0)
+
 
 ## Calculate wave interaction forces and torques
 ##
@@ -174,41 +172,36 @@ func _calculate_wave_influence(hull_depth: float) -> float:
 ## Returns:
 ##   Dictionary with force and torque vectors
 func _calculate_wave_interaction(
-	position: Vector3,
-	velocity: Vector3,
-	wave_height: float,
-	wave_influence: float
+	position: Vector3, velocity: Vector3, wave_height: float, wave_influence: float
 ) -> Dictionary:
-	var result = {
-		"force": Vector3.ZERO,
-		"torque": Vector3.ZERO
-	}
-	
+	var result = {"force": Vector3.ZERO, "torque": Vector3.ZERO}
+
 	# Requirement 9.3: Apply spring force to follow wave height
 	var height_error: float = wave_height - position.y
 	var spring_force: float = height_error * wave_spring_coefficient * wave_influence
-	
+
 	# Apply damping to prevent oscillation
 	var damping_force: float = -velocity.y * wave_damping_coefficient * wave_influence
-	
+
 	result.force.y = spring_force + damping_force
-	
+
 	# Requirement 9.5: Apply wave-induced roll and pitch torques
 	# Simplified model: waves create small random torques at surface
 	# In a more advanced model, we would sample wave gradient to determine torque direction
 	# For now, use a simple damping-based approach to create realistic surface motion
-	
+
 	# Wave-induced pitch torque (around X-axis)
 	# Proportional to forward velocity and wave influence
 	var pitch_torque: float = velocity.z * wave_torque_coefficient * wave_influence * 0.01
 	result.torque.x = pitch_torque
-	
+
 	# Wave-induced roll torque (around Z-axis)
 	# Proportional to sideways velocity and wave influence
 	var roll_torque: float = velocity.x * wave_torque_coefficient * wave_influence * 0.01
 	result.torque.z = roll_torque
-	
+
 	return result
+
 
 ## Update configuration parameters
 func configure(config: Dictionary) -> void:

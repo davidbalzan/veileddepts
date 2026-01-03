@@ -5,9 +5,4 @@
 
 class_name ChunkState
 
-enum State {
-	UNLOADED,   ## Not in memory
-	LOADING,    ## Being loaded asynchronously
-	LOADED,     ## Fully loaded and rendered
-	UNLOADING   ## Being unloaded
-}
+enum State { UNLOADED, LOADING, LOADED, UNLOADING }  ## Not in memory  ## Being loaded asynchronously  ## Fully loaded and rendered  ## Being unloaded

@@ -47,7 +47,7 @@ func test_biome_texture_params_custom_values():
 	params.roughness = 0.8
 	params.metallic = 0.2
 	params.normal_strength = 1.5
-	
+
 	assert_eq(params.albedo_color, Color.RED, "Albedo should be red")
 	assert_eq(params.roughness, 0.8, "Roughness should be 0.8")
 	assert_eq(params.metallic, 0.2, "Metallic should be 0.2")
@@ -69,13 +69,13 @@ func test_terrain_chunk_touch():
 	# Test that touch() updates last_access_time
 	var chunk = TerrainChunk.new()
 	var initial_time = chunk.last_access_time
-	
+
 	# Wait a tiny bit
 	await get_tree().create_timer(0.01).timeout
-	
+
 	chunk.touch()
 	var new_time = chunk.last_access_time
-	
+
 	assert_gt(new_time, initial_time, "Touch should update access time")
 	chunk.free()
 
@@ -83,15 +83,15 @@ func test_terrain_chunk_touch():
 func test_terrain_chunk_cleanup():
 	# Test that cleanup() properly clears resources
 	var chunk = TerrainChunk.new()
-	
+
 	# Set some data
 	chunk.chunk_coord = Vector2i(1, 2)
 	chunk.state = ChunkState.State.LOADED
 	chunk.memory_size_bytes = 1000
-	
+
 	# Cleanup
 	chunk.cleanup()
-	
+
 	# Verify cleanup
 	assert_null(chunk.base_heightmap, "Base heightmap should be null")
 	assert_null(chunk.detail_heightmap, "Detail heightmap should be null")
@@ -100,5 +100,5 @@ func test_terrain_chunk_cleanup():
 	assert_eq(chunk.lod_meshes.size(), 0, "LOD meshes should be empty")
 	assert_eq(chunk.memory_size_bytes, 0, "Memory size should be 0")
 	assert_eq(chunk.state, 0, "State should be UNLOADED (0)")
-	
+
 	chunk.free()

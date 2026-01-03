@@ -1,15 +1,11 @@
 class_name SonarSystem extends Node
 
 ## SonarSystem handles detection and tracking of contacts using various sensor types.
-## It implements passive sonar (bearing only), active sonar (bearing + range), 
+## It implements passive sonar (bearing only), active sonar (bearing + range),
 ## and radar detection (bearing + range) with different update frequencies.
 
 ## Detection types
-enum DetectionType {
-	PASSIVE_SONAR,  # Bearing only, 5s update
-	ACTIVE_SONAR,   # Bearing + range, 2s update
-	RADAR           # Bearing + range, 1s update
-}
+enum DetectionType { PASSIVE_SONAR, ACTIVE_SONAR, RADAR }  # Bearing only, 5s update  # Bearing + range, 2s update  # Bearing + range, 1s update
 
 ## Update intervals for each detection type (in seconds)
 const PASSIVE_SONAR_UPDATE_INTERVAL: float = 5.0
@@ -18,8 +14,8 @@ const RADAR_UPDATE_INTERVAL: float = 1.0
 
 ## Detection ranges for each sensor type (in meters)
 @export var passive_sonar_range: float = 10000.0  # 10 km
-@export var active_sonar_range: float = 5000.0    # 5 km
-@export var radar_range: float = 20000.0          # 20 km
+@export var active_sonar_range: float = 5000.0  # 5 km
+@export var radar_range: float = 20000.0  # 20 km
 
 ## Reference to simulation state for contact management
 var simulation_state: SimulationState
@@ -44,8 +40,9 @@ var thermal_layer_strength: float = 0.5
 
 ## Initialize the sonar system
 func _ready() -> void:
-	# Find simulation state in the scene tree
-	simulation_state = get_node_or_null("/root/Main/SimulationState")
+	# Find simulation state in the scene tree if not already injected
+	if not simulation_state:
+		simulation_state = get_node_or_null("/root/Main/SimulationState")
 	if not simulation_state:
 		push_warning("SonarSystem: SimulationState not found in scene tree")
 
@@ -54,20 +51,20 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not simulation_state:
 		return
-	
+
 	# Update passive sonar
 	_passive_sonar_timer += delta
 	if _passive_sonar_timer >= PASSIVE_SONAR_UPDATE_INTERVAL:
 		_passive_sonar_timer = 0.0
 		_update_passive_sonar()
-	
+
 	# Update active sonar if enabled
 	if active_sonar_enabled:
 		_active_sonar_timer += delta
 		if _active_sonar_timer >= ACTIVE_SONAR_UPDATE_INTERVAL:
 			_active_sonar_timer = 0.0
 			_update_active_sonar()
-	
+
 	# Update radar if enabled
 	if radar_enabled:
 		_radar_timer += delta
@@ -80,22 +77,20 @@ func _process(delta: float) -> void:
 func _update_passive_sonar() -> void:
 	var submarine_pos = simulation_state.submarine_position
 	var submarine_depth = simulation_state.submarine_depth
-	
+
 	for contact in simulation_state.contacts:
 		# Skip if contact is not a submarine or surface ship
 		if contact.type == Contact.ContactType.AIRCRAFT:
 			continue
-		
+
 		# Calculate range to contact
 		var distance = submarine_pos.distance_to(contact.position)
-		
+
 		# Apply thermal layer effects
 		var effective_range = _apply_thermal_layer_effect(
-			passive_sonar_range, 
-			submarine_depth, 
-			contact.position.y
+			passive_sonar_range, submarine_depth, contact.position.y
 		)
-		
+
 		# Check if within detection range
 		if distance <= effective_range:
 			# Passive sonar provides bearing only
@@ -112,22 +107,20 @@ func _update_passive_sonar() -> void:
 func _update_active_sonar() -> void:
 	var submarine_pos = simulation_state.submarine_position
 	var submarine_depth = simulation_state.submarine_depth
-	
+
 	for contact in simulation_state.contacts:
 		# Skip aircraft (active sonar doesn't detect aircraft)
 		if contact.type == Contact.ContactType.AIRCRAFT:
 			continue
-		
+
 		# Calculate range to contact
 		var distance = submarine_pos.distance_to(contact.position)
-		
+
 		# Apply thermal layer effects
 		var effective_range = _apply_thermal_layer_effect(
-			active_sonar_range,
-			submarine_depth,
-			contact.position.y
+			active_sonar_range, submarine_depth, contact.position.y
 		)
-		
+
 		# Check if within detection range
 		if distance <= effective_range:
 			# Active sonar provides bearing and range
@@ -145,19 +138,19 @@ func _update_active_sonar() -> void:
 func _update_radar() -> void:
 	var submarine_pos = simulation_state.submarine_position
 	var submarine_depth = simulation_state.submarine_depth
-	
+
 	# Radar only works when submarine is at periscope depth or shallower
 	if submarine_depth > 10.0:
 		return
-	
+
 	for contact in simulation_state.contacts:
 		# Radar only detects surface ships and aircraft
 		if contact.type == Contact.ContactType.SUBMARINE:
 			continue
-		
+
 		# Calculate range to contact
 		var distance = submarine_pos.distance_to(contact.position)
-		
+
 		# Check if within radar range
 		if distance <= radar_range:
 			# Radar provides bearing and range
@@ -175,20 +168,22 @@ func _update_radar() -> void:
 
 ## Apply thermal layer effects to detection range
 ## Returns the effective detection range after thermal layer reduction
-func _apply_thermal_layer_effect(base_range: float, observer_depth: float, target_depth: float) -> float:
+func _apply_thermal_layer_effect(
+	base_range: float, observer_depth: float, target_depth: float
+) -> float:
 	# Check if thermal layer is between observer and target
 	var crosses_thermal_layer = false
-	
+
 	if observer_depth < thermal_layer_depth and target_depth > thermal_layer_depth:
 		crosses_thermal_layer = true
 	elif observer_depth > thermal_layer_depth and target_depth < thermal_layer_depth:
 		crosses_thermal_layer = true
-	
+
 	# If thermal layer is crossed, reduce detection range
 	if crosses_thermal_layer:
 		# Reduce range by thermal layer strength (0.5 = 50% reduction)
 		return base_range * (1.0 - thermal_layer_strength)
-	
+
 	return base_range
 
 
@@ -225,17 +220,17 @@ func set_thermal_layer(depth: float, strength: float) -> void:
 func get_detection_type(contact: Contact) -> DetectionType:
 	if not contact.detected:
 		return DetectionType.PASSIVE_SONAR  # Default
-	
+
 	# Check if radar detected this contact
 	if radar_enabled and contact.type != Contact.ContactType.SUBMARINE:
 		var submarine_depth = simulation_state.submarine_depth
 		if submarine_depth <= 10.0:
 			return DetectionType.RADAR
-	
+
 	# Check if active sonar detected this contact
 	if active_sonar_enabled and contact.type != Contact.ContactType.AIRCRAFT:
 		return DetectionType.ACTIVE_SONAR
-	
+
 	# Default to passive sonar
 	return DetectionType.PASSIVE_SONAR
 
@@ -266,7 +261,7 @@ func force_update() -> void:
 func get_detected_contacts() -> Array[Contact]:
 	if not simulation_state:
 		return []
-	
+
 	return simulation_state.get_detected_contacts(simulation_state.submarine_position)
 
 
@@ -274,33 +269,29 @@ func get_detected_contacts() -> Array[Contact]:
 func is_contact_in_range(contact: Contact) -> bool:
 	if not simulation_state:
 		return false
-	
+
 	var submarine_pos = simulation_state.submarine_position
 	var submarine_depth = simulation_state.submarine_depth
 	var distance = submarine_pos.distance_to(contact.position)
-	
+
 	# Check passive sonar range
 	var passive_range = _apply_thermal_layer_effect(
-		passive_sonar_range,
-		submarine_depth,
-		contact.position.y
+		passive_sonar_range, submarine_depth, contact.position.y
 	)
 	if distance <= passive_range and contact.type != Contact.ContactType.AIRCRAFT:
 		return true
-	
+
 	# Check active sonar range
 	if active_sonar_enabled:
 		var active_range = _apply_thermal_layer_effect(
-			active_sonar_range,
-			submarine_depth,
-			contact.position.y
+			active_sonar_range, submarine_depth, contact.position.y
 		)
 		if distance <= active_range and contact.type != Contact.ContactType.AIRCRAFT:
 			return true
-	
+
 	# Check radar range
 	if radar_enabled and submarine_depth <= 10.0:
 		if distance <= radar_range and contact.type != Contact.ContactType.SUBMARINE:
 			return true
-	
+
 	return false

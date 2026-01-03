@@ -1,0 +1,7 @@
+{
+    "dirs": [],
+    "include_subdirs": false,
+    "log_level": 1,
+    "prefix": "test_",
+    "suffix": ".gd"
+}

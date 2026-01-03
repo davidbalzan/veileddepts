@@ -3,11 +3,7 @@ class_name Contact extends Resource
 ## Contact represents a detected entity (ship, aircraft, or submarine)
 ## displayed on sonar, radar, or ESM systems.
 
-enum ContactType {
-	SURFACE_SHIP,
-	AIRCRAFT,
-	SUBMARINE
-}
+enum ContactType { SURFACE_SHIP, AIRCRAFT, SUBMARINE }
 
 ## Unique identifier for this contact
 @export var id: int = 0
@@ -45,11 +41,11 @@ func calculate_bearing(observer_position: Vector3) -> float:
 	# This gives: North=0°, East=90°, South=180°, West=270°
 	var bearing_rad = atan2(delta.x, -delta.z)
 	var bearing_deg = rad_to_deg(bearing_rad)
-	
+
 	# Normalize to 0-360 range
 	if bearing_deg < 0:
 		bearing_deg += 360.0
-	
+
 	_cached_bearing = bearing_deg
 	return bearing_deg
 
@@ -59,7 +55,7 @@ func calculate_bearing(observer_position: Vector3) -> float:
 func calculate_range(observer_position: Vector3) -> float:
 	var delta = position - observer_position
 	var range_meters = delta.length()
-	
+
 	_cached_range = range_meters
 	return range_meters
 
@@ -80,19 +76,19 @@ func get_range() -> float:
 ## This is more efficient than calling both methods separately
 func update_bearing_and_range(observer_position: Vector3) -> void:
 	var delta = position - observer_position
-	
+
 	# Calculate range
 	_cached_range = delta.length()
-	
+
 	# Calculate bearing using unified coordinate system
 	# atan2(x, -z) where -Z is North, +X is East
 	var bearing_rad = atan2(delta.x, -delta.z)
 	var bearing_deg = rad_to_deg(bearing_rad)
-	
+
 	# Normalize to 0-360 range
 	if bearing_deg < 0:
 		bearing_deg += 360.0
-	
+
 	_cached_bearing = bearing_deg
 	_cache_valid = true
 

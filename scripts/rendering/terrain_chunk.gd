@@ -47,7 +47,7 @@ func touch() -> void:
 ## Calculate approximate memory usage in bytes
 func calculate_memory_size() -> int:
 	var size: int = 0
-	
+
 	# Heightmap images
 	if base_heightmap:
 		size += base_heightmap.get_width() * base_heightmap.get_height() * 4  # Assuming float format
@@ -57,12 +57,12 @@ func calculate_memory_size() -> int:
 		size += biome_map.get_width() * biome_map.get_height() * 1  # Assuming byte format
 	if bump_map:
 		size += bump_map.get_width() * bump_map.get_height() * 4  # RGBA
-	
+
 	# LOD meshes (rough estimate)
 	for mesh in lod_meshes:
 		if mesh:
 			size += 1024  # Rough estimate per mesh
-	
+
 	memory_size_bytes = size
 	return size
 
@@ -74,15 +74,15 @@ func cleanup() -> void:
 	detail_heightmap = null
 	biome_map = null
 	bump_map = null
-	
+
 	# Clear meshes
 	lod_meshes.clear()
-	
+
 	# Remove rendering components
 	if mesh_instance:
 		mesh_instance.queue_free()
 		mesh_instance = null
-	
+
 	# Remove collision components
 	if collision_shape:
 		collision_shape.queue_free()
@@ -90,12 +90,12 @@ func cleanup() -> void:
 	if static_body:
 		static_body.queue_free()
 		static_body = null
-	
+
 	# Clear material
 	material = null
-	
+
 	# Clear neighbors
 	neighbors.clear()
-	
+
 	memory_size_bytes = 0
 	state = 0  # ChunkState.State.UNLOADED

@@ -46,13 +46,21 @@ func _ready() -> void:
 func update_submarine_command(waypoint: Vector3, speed: float, depth: float) -> void:
 	# Set target waypoint
 	target_waypoint = waypoint
-	
+
 	# Clamp speed to operational limits (allow negative for reverse)
 	target_speed = clamp(speed, -MAX_SPEED * 0.5, MAX_SPEED)  # Reverse at half speed
-	
+
 	# Clamp depth to operational limits
 	target_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
 	
+	# Log submarine command to console
+	if LogRouter:
+		LogRouter.log(
+			"Submarine command updated: waypoint=(%.1f, %.1f, %.1f), speed=%.1fm/s, depth=%.1fm" % [waypoint.x, waypoint.y, waypoint.z, target_speed, target_depth],
+			LogRouter.LogLevel.INFO,
+			"submarine"
+		)
+
 	# Update TARGET heading to point toward waypoint
 	var delta = waypoint - submarine_position
 	if delta.length() > 0.1:  # Only update if waypoint is not at current position
@@ -60,23 +68,23 @@ func update_submarine_command(waypoint: Vector3, speed: float, depth: float) -> 
 		# atan2(x, -z) gives angle where 0 is north (-Z), 90 is east (+X)
 		var heading_rad = atan2(delta.x, -delta.z)
 		var basic_heading = rad_to_deg(heading_rad)
-		
+
 		# Normalize to 0-360 range
 		if basic_heading < 0:
 			basic_heading += 360.0
-		
+
 		# Calculate lead-ahead for turning at current speed
 		var distance_to_waypoint = delta.length()
 		var current_speed_2d = Vector2(submarine_velocity.x, submarine_velocity.z).length()
-		
+
 		# Estimate turning radius based on current speed (simplified)
 		var turning_radius = 50.0  # Base turning radius in meters
 		if current_speed_2d > 1.0:
 			turning_radius = current_speed_2d * 8.0  # Rough approximation
-		
+
 		# If we're close to the waypoint and moving fast, start turning early
 		var lead_ahead_distance = min(turning_radius, distance_to_waypoint * 0.5)
-		
+
 		if distance_to_waypoint < lead_ahead_distance * 2.0 and current_speed_2d > 2.0:
 			# We're approaching the waypoint - calculate lead-ahead heading
 			var lead_ahead_point = waypoint + delta.normalized() * lead_ahead_distance
@@ -121,13 +129,13 @@ func add_contact(contact: Contact) -> int:
 	if contact.id == 0:
 		contact.id = _next_contact_id
 		_next_contact_id += 1
-	
+
 	# Check for duplicate ID
 	for existing_contact in contacts:
 		if existing_contact.id == contact.id:
 			push_warning("Contact with ID %d already exists, not adding duplicate" % contact.id)
 			return -1
-	
+
 	# Add contact to tracking list
 	contacts.append(contact)
 	return contact.id
@@ -135,14 +143,16 @@ func add_contact(contact: Contact) -> int:
 
 ## Update an existing contact's position and detection status
 ## Returns true if contact was found and updated, false otherwise
-func update_contact(contact_id: int, new_position: Vector3, is_detected: bool, is_identified: bool) -> bool:
+func update_contact(
+	contact_id: int, new_position: Vector3, is_detected: bool, is_identified: bool
+) -> bool:
 	for contact in contacts:
 		if contact.id == contact_id:
 			contact.position = new_position
 			contact.detected = is_detected
 			contact.identified = is_identified
 			return true
-	
+
 	push_warning("Contact with ID %d not found for update" % contact_id)
 	return false
 
@@ -152,14 +162,14 @@ func update_contact(contact_id: int, new_position: Vector3, is_detected: bool, i
 ## This is used by the fog-of-war system
 func get_visible_contacts(observer_position: Vector3) -> Array[Contact]:
 	var visible: Array[Contact] = []
-	
+
 	for contact in contacts:
 		# Contact must be both detected and identified to be visible
 		if contact.detected and contact.identified:
 			# Update bearing and range from observer position
 			contact.update_bearing_and_range(observer_position)
 			visible.append(contact)
-	
+
 	return visible
 
 
@@ -167,13 +177,13 @@ func get_visible_contacts(observer_position: Vector3) -> Array[Contact]:
 ## This is used by the tactical map to show all sensor contacts
 func get_detected_contacts(observer_position: Vector3) -> Array[Contact]:
 	var detected: Array[Contact] = []
-	
+
 	for contact in contacts:
 		if contact.detected:
 			# Update bearing and range from observer position
 			contact.update_bearing_and_range(observer_position)
 			detected.append(contact)
-	
+
 	return detected
 
 
@@ -184,7 +194,7 @@ func remove_contact(contact_id: int) -> bool:
 		if contacts[i].id == contact_id:
 			contacts.remove_at(i)
 			return true
-	
+
 	return false
 
 
@@ -194,7 +204,7 @@ func get_contact(contact_id: int) -> Contact:
 	for contact in contacts:
 		if contact.id == contact_id:
 			return contact
-	
+
 	return null
 
 
@@ -205,18 +215,40 @@ func clear_contacts() -> void:
 
 ## Update submarine state based on physics calculations
 ## This is called by the submarine physics system each frame
-func update_submarine_state(position: Vector3, velocity: Vector3, depth: float, heading: float, speed: float) -> void:
+func update_submarine_state(
+	position: Vector3, velocity: Vector3, depth: float, heading: float, speed: float
+) -> void:
+	# Check for significant position changes (more than 10 meters)
+	var position_changed = submarine_position.distance_to(position) > 10.0
+	var old_depth = submarine_depth
+	
 	submarine_position = position
 	submarine_velocity = velocity
 	submarine_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
 	submarine_heading = heading
 	submarine_speed = clamp(speed, 0.0, MAX_SPEED)
-	
+
 	# Normalize heading to 0-360 range
 	while submarine_heading < 0:
 		submarine_heading += 360.0
 	while submarine_heading >= 360:
 		submarine_heading -= 360.0
+	
+	# Log significant state changes to console
+	if position_changed and LogRouter:
+		LogRouter.log(
+			"Submarine position: (%.1f, %.1f, %.1f), depth: %.1fm, heading: %.1f°, speed: %.1fm/s" % [position.x, position.y, position.z, submarine_depth, submarine_heading, submarine_speed],
+			LogRouter.LogLevel.DEBUG,
+			"submarine"
+		)
+	
+	# Log depth changes
+	if abs(submarine_depth - old_depth) > 5.0 and LogRouter:
+		LogRouter.log(
+			"Submarine depth changed: %.1fm -> %.1fm" % [old_depth, submarine_depth],
+			LogRouter.LogLevel.DEBUG,
+			"submarine"
+		)
 
 
 ## Get the current submarine state as a dictionary

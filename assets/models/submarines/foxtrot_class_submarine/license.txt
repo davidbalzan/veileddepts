@@ -1,0 +1,11 @@
+Model Information:
+* title:	FOXTROT CLASS SUBMARINE
+* source:	https://sketchfab.com/3d-models/foxtrot-class-submarine-45bb6fc9cf4a46f9b173c8e4c66a00ba
+* author:	Muhamad Mirza Arrafi (https://sketchfab.com/nazidefenseforceofficial)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "FOXTROT CLASS SUBMARINE" (https://sketchfab.com/3d-models/foxtrot-class-submarine-45bb6fc9cf4a46f9b173c8e4c66a00ba) by Muhamad Mirza Arrafi (https://sketchfab.com/nazidefenseforceofficial) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

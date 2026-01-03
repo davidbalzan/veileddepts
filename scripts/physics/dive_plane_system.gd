@@ -17,6 +17,7 @@ var max_effective_speed: float = 5.0  # Speed for full plane effectiveness (m/s)
 var torque_coefficient: float = 1000000.0  # Base torque multiplier (N·m)
 var depth_to_pitch_ratio: float = 150.0  # Depth error to pitch angle conversion
 
+
 func _init(config: Dictionary = {}):
 	if config.has("bow_plane_effectiveness"):
 		bow_plane_effectiveness = config.bow_plane_effectiveness
@@ -32,6 +33,7 @@ func _init(config: Dictionary = {}):
 		torque_coefficient = config.torque_coefficient
 	if config.has("depth_to_pitch_ratio"):
 		depth_to_pitch_ratio = config.depth_to_pitch_ratio
+
 
 ## Calculate dive plane pitch torque for depth control
 ##
@@ -53,48 +55,49 @@ func calculate_dive_plane_torque(
 ) -> float:
 	# Requirement 8.5: Calculate depth error
 	var depth_error: float = target_depth - current_depth
-	
+
 	# Requirement 8.10: Calculate desired pitch angle from depth error
 	# Positive depth error (need to go deeper) = negative pitch (nose down)
 	# Negative depth error (need to go shallower) = positive pitch (nose up)
 	var desired_pitch: float = -depth_error / depth_to_pitch_ratio
-	
+
 	# Requirement 8.8: Clamp plane angles to ±15°
 	desired_pitch = clamp(desired_pitch, -max_plane_angle, max_plane_angle)
-	
+
 	# Requirement 8.6: When depth error is less than 1 meter, level the submarine pitch to zero
 	if abs(depth_error) < 1.0:
 		desired_pitch = 0.0
-	
+
 	# Calculate pitch error
 	var pitch_error: float = desired_pitch - current_pitch
-	
+
 	# Calculate plane angle from pitch error
 	# Use proportional control to determine plane deflection
 	var plane_angle: float = clamp(pitch_error, -max_plane_angle, max_plane_angle)
-	
+
 	# Requirement 19.2: Calculate water flow speed effectiveness
 	var water_flow_speed: float = abs(forward_speed)
 	var speed_effectiveness: float = _calculate_speed_effectiveness(water_flow_speed)
-	
+
 	# Requirement 19.1, 19.9: Calculate pitch torque: angle * speed^2 * effectiveness
 	# Using speed squared for hydrodynamic lift force
 	var speed_factor: float = water_flow_speed * water_flow_speed
-	
+
 	# Calculate base torque from hydrodynamic force on planes
 	var base_torque: float = plane_angle * speed_factor * torque_coefficient * speed_effectiveness
-	
+
 	# Requirement 19.8, 19.7: Split torque: 40% bow planes, 60% stern planes
 	# Both contribute to the same direction of pitch torque
 	var bow_torque: float = base_torque * bow_plane_effectiveness
 	var stern_torque: float = base_torque * stern_plane_effectiveness
-	
+
 	# Return total pitch torque
 	return bow_torque + stern_torque
 
+
 ## Calculate speed effectiveness factor for dive planes
 ##
-## Requirements 19.2, 19.3: 
+## Requirements 19.2, 19.3:
 ##   - Below 1 m/s: < 10% effectiveness
 ##   - 1-5 m/s: linear scaling
 ##   - Above 5 m/s: 100% effectiveness
@@ -109,17 +112,18 @@ func _calculate_speed_effectiveness(speed: float) -> float:
 	if speed < min_effective_speed:
 		# Linear scaling from 0% at 0 m/s to 10% at 1 m/s
 		return 0.1 * (speed / min_effective_speed)
-	
+
 	# Requirement 19.2: Above max_effective_speed (5 m/s), full effectiveness (100%)
 	if speed >= max_effective_speed:
 		return 1.0
-	
+
 	# Requirement 19.2: Between 1-5 m/s, linear scaling from 10% to 100%
 	var speed_range: float = max_effective_speed - min_effective_speed
 	var speed_above_min: float = speed - min_effective_speed
 	var effectiveness_range: float = 1.0 - 0.1  # 100% - 10%
-	
+
 	return 0.1 + (speed_above_min / speed_range) * effectiveness_range
+
 
 ## Update configuration parameters
 func configure(config: Dictionary) -> void:

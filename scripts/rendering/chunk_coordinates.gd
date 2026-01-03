@@ -83,20 +83,20 @@ func is_position_in_chunk(world_pos: Vector3, chunk_coord: Vector2i) -> bool:
 func get_chunks_in_radius(world_pos: Vector3, radius: float) -> Array[Vector2i]:
 	var chunks: Array[Vector2i] = []
 	var center_chunk: Vector2i = world_to_chunk(world_pos)
-	
+
 	# Calculate how many chunks to check in each direction
 	var chunk_radius: int = ceili(radius / chunk_size) + 1
-	
+
 	for x in range(center_chunk.x - chunk_radius, center_chunk.x + chunk_radius + 1):
 		for z in range(center_chunk.y - chunk_radius, center_chunk.y + chunk_radius + 1):
 			var chunk_coord: Vector2i = Vector2i(x, z)
 			var chunk_center: Vector3 = chunk_to_world(chunk_coord)
-			
+
 			# Check if chunk center is within radius
 			var distance: float = world_pos.distance_to(chunk_center)
 			if distance <= radius + chunk_size * 0.707:  # Add diagonal tolerance
 				chunks.append(chunk_coord)
-	
+
 	return chunks
 
 
@@ -108,10 +108,10 @@ func get_chunks_in_radius(world_pos: Vector3, radius: float) -> Array[Vector2i]:
 func get_distance_to_chunk(world_pos: Vector3, chunk_coord: Vector2i) -> float:
 	var bounds: Rect2 = get_chunk_bounds(chunk_coord)
 	var pos_2d: Vector2 = Vector2(world_pos.x, world_pos.z)
-	
+
 	# Find closest point in bounds to position
 	var closest_x: float = clampf(pos_2d.x, bounds.position.x, bounds.position.x + bounds.size.x)
 	var closest_z: float = clampf(pos_2d.y, bounds.position.y, bounds.position.y + bounds.size.y)
 	var closest_point: Vector2 = Vector2(closest_x, closest_z)
-	
+
 	return pos_2d.distance_to(closest_point)

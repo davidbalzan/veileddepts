@@ -1,0 +1,11 @@
+Model Information:
+* title:	Kilo Class Submarine
+* source:	https://sketchfab.com/3d-models/kilo-class-submarine-b7b2b557ebfa422b961d44b546369b08
+* author:	Art Blender (https://sketchfab.com/ArtBlender)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Kilo Class Submarine" (https://sketchfab.com/3d-models/kilo-class-submarine-b7b2b557ebfa422b961d44b546369b08) by Art Blender (https://sketchfab.com/ArtBlender) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

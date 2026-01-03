@@ -1,0 +1,11 @@
+Model Information:
+* title:	Virginia
+* source:	https://sketchfab.com/3d-models/virginia-3e66797134fe4fc7b3451a2774a7f3ab
+* author:	Mixmamo.studio:   An effortless 3D collections. (https://sketchfab.com/mixmamo.studio)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Virginia" (https://sketchfab.com/3d-models/virginia-3e66797134fe4fc7b3451a2774a7f3ab) by Mixmamo.studio:   An effortless 3D collections. (https://sketchfab.com/mixmamo.studio) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

@@ -24,15 +24,17 @@ var initialized: bool = false
 @export_group("Ocean Level")
 @export var sea_level: float = 0.0
 
+
 func _ready() -> void:
 	if not Engine.is_editor_hint():
 		call_deferred("_setup_ocean")
+
 
 func _setup_ocean() -> void:
 	var rd = RenderingServer.get_rendering_device()
 	if rd == null:
 		return
-	
+
 	camera = get_viewport().get_camera_3d()
 	if not camera:
 		camera = Camera3D.new()
@@ -40,51 +42,58 @@ func _setup_ocean() -> void:
 		camera.far = 16000.0
 		add_child(camera)
 		camera.make_current()
-	
+
 	ocean = Ocean3D.new()
-	
+
 	match fft_resolution_index:
-		0: ocean.fft_resolution = Ocean3D.FFTResolution.FFT_64x64
-		1: ocean.fft_resolution = Ocean3D.FFTResolution.FFT_128x128
-		2: ocean.fft_resolution = Ocean3D.FFTResolution.FFT_256x256
-		3: ocean.fft_resolution = Ocean3D.FFTResolution.FFT_512x512
-	
+		0:
+			ocean.fft_resolution = Ocean3D.FFTResolution.FFT_64x64
+		1:
+			ocean.fft_resolution = Ocean3D.FFTResolution.FFT_128x128
+		2:
+			ocean.fft_resolution = Ocean3D.FFTResolution.FFT_256x256
+		3:
+			ocean.fft_resolution = Ocean3D.FFTResolution.FFT_512x512
+
 	ocean.horizontal_dimension = horizontal_dimension
 	ocean.wind_speed = wind_speed
 	ocean.wind_direction_degrees = wind_direction_degrees
 	ocean.choppiness = choppiness
 	ocean.time_scale = time_scale
 	ocean.simulation_frameskip = 0
-	
+
 	ocean.initialize_simulation()
 	await get_tree().process_frame
-	
+
 	quad_tree = QuadTree3D.new()
 	quad_tree.lod_level = lod_level
 	quad_tree.quad_size = quad_size
 	quad_tree.mesh_vertex_resolution = mesh_vertex_resolution
 	quad_tree.material = ocean.material
-	
+
 	var ranges: Array[float] = []
 	var current_range = quad_size / 8.0
 	for i in range(lod_level + 1):
 		ranges.append(current_range)
 		current_range *= 2.5
 	quad_tree.ranges = ranges
-	
+
 	add_child(quad_tree)
 	initialized = true
 	print("OceanRenderer: Initialized")
 
+
 func _exit_tree() -> void:
 	# Clean up GPU resources to prevent RID leaks
-	if ocean:
+	if ocean and is_instance_valid(ocean):
 		ocean.cleanup()
 	initialized = false
+
 
 func _process(delta: float) -> void:
 	if initialized and ocean and ocean.initialized:
 		ocean.simulate(delta)
+
 
 func get_wave_height_3d(world_pos: Vector3) -> float:
 	if not initialized or not ocean or not ocean.initialized:
@@ -96,6 +105,7 @@ func get_wave_height_3d(world_pos: Vector3) -> float:
 	# Use all 3 cascades to match the visual shader (CASCADE_COUNT = 3)
 	var displacement = ocean.get_wave_height(active_camera, world_pos, 3, 2)
 	return sea_level + displacement
+
 
 func is_position_underwater(world_pos: Vector3, buffer: float = 0.5) -> bool:
 	if not initialized:

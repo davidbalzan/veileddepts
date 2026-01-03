@@ -3,11 +3,12 @@ extends SceneTree
 ## Checkpoint Verification Script
 ## Verifies that AI patrols, sonar system, and terrain collision are working
 
+
 func _init():
 	print("\n=== CHECKPOINT 16: Simulation Complete Verification ===\n")
-	
+
 	var all_passed = true
-	
+
 	# Test 1: Verify AI System exists and can spawn patrols
 	print("Test 1: AI Patrol System")
 	var ai_system_script = load("res://scripts/ai/ai_system.gd")
@@ -23,7 +24,7 @@ func _init():
 	else:
 		print("  ✗ AI System script not found")
 		all_passed = false
-	
+
 	# Test 2: Verify Sonar System exists and has detection methods
 	print("\nTest 2: Sonar Detection System")
 	var sonar_system_script = load("res://scripts/core/sonar_system.gd")
@@ -43,7 +44,7 @@ func _init():
 	else:
 		print("  ✗ Sonar System script not found")
 		all_passed = false
-	
+
 	# Test 3: Verify Terrain System exists and has collision detection
 	print("\nTest 3: Terrain Collision System")
 	var terrain_script = load("res://scripts/rendering/terrain_renderer.gd")
@@ -61,7 +62,7 @@ func _init():
 	else:
 		print("  ✗ Terrain Renderer script not found")
 		all_passed = false
-	
+
 	# Test 4: Verify Submarine Physics integrates with all systems
 	print("\nTest 4: Submarine Physics Integration")
 	var physics_script = load("res://scripts/physics/submarine_physics.gd")
@@ -81,7 +82,7 @@ func _init():
 	else:
 		print("  ✗ Submarine Physics script not found")
 		all_passed = false
-	
+
 	# Test 5: Verify Contact tracking system
 	print("\nTest 5: Contact Tracking System")
 	var contact_script = load("res://scripts/core/contact.gd")
@@ -106,7 +107,7 @@ func _init():
 	else:
 		print("  ✗ Contact class not found")
 		all_passed = false
-	
+
 	# Test 6: Verify Simulation State coordinates everything
 	print("\nTest 6: Simulation State Coordination")
 	var sim_state_script = load("res://scripts/core/simulation_state.gd")
@@ -124,7 +125,7 @@ func _init():
 	else:
 		print("  ✗ Simulation State script not found")
 		all_passed = false
-	
+
 	# Summary
 	print("\n=== CHECKPOINT SUMMARY ===")
 	if all_passed:

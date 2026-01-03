@@ -39,10 +39,10 @@ func remove_appendage(name: String) -> void:
 ## @return: Total drag multiplier, clamped to [0.0, max_total_multiplier]
 func get_total_drag_multiplier() -> float:
 	var total: float = 0.0
-	
+
 	for multiplier in appendages.values():
 		total += multiplier
-	
+
 	# Clamp to maximum allowed increase (100% = 2.0x base drag)
 	return clamp(total, 0.0, max_total_multiplier)
 

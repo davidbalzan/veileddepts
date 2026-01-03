@@ -17,7 +17,7 @@ func _ready() -> void:
 		simulation_state = main_node.get_node_or_null("SimulationState")
 		if not simulation_state:
 			push_error("FogOfWarSystem: SimulationState not found")
-	
+
 	print("FogOfWarSystem: Initialized")
 
 
@@ -28,7 +28,7 @@ func _ready() -> void:
 func is_contact_visible(contact: Contact) -> bool:
 	if not contact:
 		return false
-	
+
 	# Contact must be both detected AND identified to be visible
 	# This implements the fog-of-war rule: you can only see what you've
 	# both detected (sensor contact) and identified (confirmed type)
@@ -51,13 +51,13 @@ func update_visibility(contacts: Array[Contact]) -> void:
 func get_visible_contacts() -> Array[Contact]:
 	if not simulation_state:
 		return []
-	
+
 	var visible_contacts: Array[Contact] = []
-	
+
 	for contact in simulation_state.contacts:
 		if is_contact_visible(contact):
 			visible_contacts.append(contact)
-	
+
 	return visible_contacts
 
 

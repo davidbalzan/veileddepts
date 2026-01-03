@@ -247,6 +247,7 @@ var _rng := RandomNumberGenerator.new()
 
 
 ## Clean up GPU resources to prevent RID leaks
+## Clean up GPU resources to prevent RID leaks
 func cleanup() -> void:
 	if not _rd:
 		return
@@ -254,51 +255,84 @@ func cleanup() -> void:
 	# Free shaders and pipelines
 	if _initial_spectrum_shader.is_valid():
 		_rd.free_rid(_initial_spectrum_shader)
+		_initial_spectrum_shader = RID()
 	if _initial_spectrum_pipeline.is_valid():
 		_rd.free_rid(_initial_spectrum_pipeline)
+		_initial_spectrum_pipeline = RID()
 	if _phase_shader.is_valid():
 		_rd.free_rid(_phase_shader)
+		_phase_shader = RID()
 	if _phase_pipeline.is_valid():
 		_rd.free_rid(_phase_pipeline)
+		_phase_pipeline = RID()
 	if _spectrum_shader.is_valid():
 		_rd.free_rid(_spectrum_shader)
+		_spectrum_shader = RID()
 	if _spectrum_pipeline.is_valid():
 		_rd.free_rid(_spectrum_pipeline)
+		_spectrum_pipeline = RID()
 	if _fft_horizontal_shader.is_valid():
 		_rd.free_rid(_fft_horizontal_shader)
+		_fft_horizontal_shader = RID()
 	if _fft_horizontal_pipeline.is_valid():
 		_rd.free_rid(_fft_horizontal_pipeline)
+		_fft_horizontal_pipeline = RID()
 	if _fft_vertical_shader.is_valid():
 		_rd.free_rid(_fft_vertical_shader)
+		_fft_vertical_shader = RID()
 	if _fft_vertical_pipeline.is_valid():
 		_rd.free_rid(_fft_vertical_pipeline)
+		_fft_vertical_pipeline = RID()
 
 	# Free storage buffers
 	if _phase_settings_buffer.is_valid():
 		_rd.free_rid(_phase_settings_buffer)
+		_phase_settings_buffer = RID()
 	if _spectrum_settings_buffer.is_valid():
 		_rd.free_rid(_spectrum_settings_buffer)
+		_spectrum_settings_buffer = RID()
 	if _fft_settings_buffer.is_valid():
 		_rd.free_rid(_fft_settings_buffer)
+		_fft_settings_buffer = RID()
 	if _sub_pong_tex.is_valid():
 		_rd.free_rid(_sub_pong_tex)
+		_sub_pong_tex = RID()
 
 	# Free cascade arrays
 	for rid in _initial_spectrum_settings_buffer_cascade:
 		if rid.is_valid():
 			_rd.free_rid(rid)
+	_initial_spectrum_settings_buffer_cascade.clear()
+
+	for rid in _initial_spectrum_settings_uniform_cascade:
+		# Uniforms are Objects, not RIDs, so they don't need free_rid but we should clear references
+		pass
+	_initial_spectrum_settings_uniform_cascade.clear()
+
 	for rid in _initial_spectrum_tex_cascade:
 		if rid.is_valid():
 			_rd.free_rid(rid)
+	_initial_spectrum_tex_cascade.clear()
+
 	for rid in _ping_tex_cascade:
 		if rid.is_valid():
 			_rd.free_rid(rid)
+	_ping_tex_cascade.clear()
+
 	for rid in _pong_tex_cascade:
 		if rid.is_valid():
 			_rd.free_rid(rid)
+	_pong_tex_cascade.clear()
+
 	for rid in _spectrum_tex_cascade:
 		if rid.is_valid():
 			_rd.free_rid(rid)
+	_spectrum_tex_cascade.clear()
+	
+	_initial_spectrum_uniform_cascade.clear()
+	_ping_uniform_cascade.clear()
+	_pong_uniform_cascade.clear()
+	_spectrum_uniform_cascade.clear()
 
 	initialized = false
 

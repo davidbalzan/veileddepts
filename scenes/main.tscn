@@ -1,5 +1,6 @@
-[gd_scene load_steps=21 format=3 uid="uid://b8qvxj3yvwxqy"]
+[gd_scene load_steps=23 format=3 uid="uid://b8qvxj3yvwxqy"]
 
+[ext_resource type="PackedScene" path="res://assets/models/submarines/uss_seawolf_ssn-21/scene.gltf" id="1_seawolf"]
 [ext_resource type="Script" uid="uid://ci1os4r75yo66" path="res://scripts/core/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://bxpqklmqxolv" path="res://scripts/core/view_manager.gd" id="2_view_manager"]
 [ext_resource type="Script" uid="uid://co5k6paec85qe" path="res://scripts/core/simulation_state.gd" id="3_simulation_state"]
@@ -18,6 +19,8 @@
 [ext_resource type="Script" path="res://scripts/ai/ai_system.gd" id="16_ai_system"]
 [ext_resource type="Script" path="res://scripts/debug/submarine_tuning_panel.gd" id="17_tuning_panel"]
 [ext_resource type="Script" path="res://scripts/views/whole_map_view.gd" id="18_whole_map_view"]
+[ext_resource type="Script" path="res://scripts/rendering/submarine_wake.gd" id="19_submarine_wake"]
+[ext_resource type="Script" path="res://scripts/ui/dev_console.gd" id="20_dev_console"]
 
 [sub_resource type="Environment" id="Environment_eb6dy"]
 background_mode = 1
@@ -106,22 +109,8 @@ axis_lock_angular_z = true
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
 shape = SubResource("CapsuleShape3D_submarine")
 
-[node name="Hull" type="CSGCylinder3D" parent="SubmarineModel"]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
-radius = 1.5
-height = 20.0
-
-[node name="Conning" type="CSGBox3D" parent="SubmarineModel"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, -2)
-size = Vector3(1.0, 1.5, 3.0)
-
-[node name="Rudder" type="CSGBox3D" parent="SubmarineModel"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
-size = Vector3(0.2, 2.0, 2.0)
-
-[node name="Propeller" type="CSGBox3D" parent="SubmarineModel"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
-size = Vector3(2.0, 2.0, 0.3)
+[node name="SeawolfMesh" parent="SubmarineModel" instance=ExtResource("1_seawolf")]
+transform = Transform3D(0, 0, 1.3, 0, 1.3, 0, -1.3, 0, 0, 0, 0, 0)
 
 [node name="OceanRenderer" type="Node3D" parent="." groups=["ocean_renderer"]]
 script = ExtResource("9_ocean_renderer")
@@ -134,15 +123,16 @@ quad_size = 16384.0
 
 [node name="TerrainRenderer" type="Node3D" parent="." groups=["terrain_renderer"]]
 script = ExtResource("14_terrain_renderer")
-terrain_size = Vector2i(2048, 2048)
-terrain_resolution = 256
-max_height = 100.0
-min_height = -200.0
+chunk_size = 512.0
+load_distance = 2048.0
+unload_distance = 3072.0
+max_cache_memory_mb = 512
 lod_levels = 4
-enable_micro_detail = true
-micro_detail_scale = 2.0
-micro_detail_frequency = 0.05
-external_heightmap_path = "res://src_assets/World_elevation_map.png"
+base_lod_distance = 100.0
+enable_procedural_detail = true
+detail_scale = 2.0
+detail_frequency = 0.05
+elevation_map_path = "res://src_assets/World_elevation_map.png"
 heightmap_region = Rect2(0.25, 0.3, 0.1, 0.1)
 use_external_heightmap = true
 
@@ -152,6 +142,11 @@ max_render_distance = 200.0
 foam_culling_threshold = 0.5
 fish_count = 100
 spawn_radius = 150.0
+
+[node name="SubmarineWake" type="Node3D" parent="."]
+script = ExtResource("19_submarine_wake")
+surface_threshold = 5.0
+min_speed_for_wake = 1.0
 
 [node name="AtmosphereRenderer" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_eb6dy")
@@ -166,3 +161,7 @@ script = ExtResource("10_ocean_debug_ui")
 
 [node name="SubmarineTuningPanel" type="CanvasLayer" parent="."]
 script = ExtResource("17_tuning_panel")
+
+[node name="DevConsole" type="CanvasLayer" parent="."]
+layer = 10
+script = ExtResource("20_dev_console")
