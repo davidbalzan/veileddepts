@@ -18,6 +18,8 @@ var show_terrain: bool = true
 var terrain_world_size: float = 10000.0  # meters
 var _terrain_generation_attempted: bool = false
 var _last_generated_zoom: float = 1.0
+var _last_generated_pos: Vector3 = Vector3.ZERO
+var _zoom_settle_timer: float = 0.0
 
 ## Help overlay
 var help_overlay: Control = null
@@ -537,11 +539,20 @@ func _process(_delta: float) -> void:
 	if not visible or not simulation_state:
 		return
 
-	# Trigger regeneration if zoom changes significantly
+	# Trigger regeneration if zoom changes significantly or we move far enough
 	if visible and terrain_texture and terrain_renderer:
-		if abs(map_zoom - _last_generated_zoom) / _last_generated_zoom > 0.25:
-			print("TacticalMapView: Zoom changed significantly, regenerating terrain...")
-			_generate_terrain_texture()
+		var zoom_changed = abs(map_zoom - _last_generated_zoom) / _last_generated_zoom > 0.15
+		var pos_diff = simulation_state.submarine_position.distance_to(_last_generated_pos)
+		var moved_far = pos_diff > 500.0 # Refresh every 500m
+		
+		if zoom_changed or moved_far:
+			_zoom_settle_timer += _delta
+			if _zoom_settle_timer > 0.3: # Settle for 300ms
+				print("TacticalMapView: Resampling terrain (Zoom/Movement)...")
+				_generate_terrain_texture()
+				_zoom_settle_timer = 0.0
+		else:
+			_zoom_settle_timer = 0.0
 	
 	# Try to generate terrain texture if we don't have one yet
 	if not terrain_texture and terrain_renderer and not _terrain_generation_attempted:
@@ -662,16 +673,17 @@ func _generate_terrain_texture() -> void:
 	print("TacticalMapView: Found elevation provider, generating preview...")
 
 	# Generate a preview texture from the elevation data
-	# Using 256x256 for a good balance of sharpness and generation speed (~400ms)
+	# Using 256x256 for a good balance of sharpness and generation speed (~100-150ms)
 	var preview_size = 256
 	
-	# Calculate world size needed to cover screen + 20% margin
+	# Calculate world size needed to cover screen + wide margin to reduce jitter
 	var viewport_size = get_viewport().get_visible_rect().size
 	var required_world_w = viewport_size.x / (map_scale * map_zoom)
 	var required_world_h = viewport_size.y / (map_scale * map_zoom)
 	
-	terrain_world_size = max(required_world_w, required_world_h) * 1.5 # 50% margin
+	terrain_world_size = max(required_world_w, required_world_h) * 1.8 # 80% margin
 	_last_generated_zoom = map_zoom
+	_last_generated_pos = simulation_state.submarine_position
 	
 	var start_time = Time.get_ticks_msec()
 
