@@ -32,7 +32,7 @@ class_name TerrainRenderer extends Node3D
 @export_group("Elevation Data")
 @export var elevation_map_path: String = "res://src_assets/World_elevation_map.png"
 @export var use_external_heightmap: bool = true  # Use world elevation map
-@export var heightmap_region: Rect2 = Rect2(0.47, 0.38, 0.1, 0.1)  # Mediterranean Sea near coast
+@export var heightmap_region: Rect2 = Rect2(0.47, 0.30, 0.02, 0.02)  # North Sea - shallow water at ~100m depth
 
 @export_group("Debug")
 @export var enable_debug_overlay: bool = false  # Show debug visualization
@@ -75,9 +75,15 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		call_deferred("_setup_terrain")
+		# Connect to SeaLevelManager signal
+		if SeaLevelManager:
+			SeaLevelManager.sea_level_changed.connect(_on_sea_level_changed)
 
 
 func _exit_tree() -> void:
+	# Disconnect from SeaLevelManager signal
+	if SeaLevelManager and SeaLevelManager.sea_level_changed.is_connected(_on_sea_level_changed):
+		SeaLevelManager.sea_level_changed.disconnect(_on_sea_level_changed)
 	_cleanup_terrain()
 
 
@@ -228,6 +234,53 @@ func _process(_delta: float) -> void:
 		if _chunk_manager:
 			var chunk_count = _chunk_manager.get_chunk_count()
 			print("TerrainRenderer DEBUG: %d chunks loaded, sub at %s" % [chunk_count, _submarine.global_position])
+
+
+## Callback when sea level changes
+## Updates all loaded chunks with the new sea level value
+func _on_sea_level_changed(normalized: float, meters: float) -> void:
+	if not initialized or not _chunk_manager:
+		return
+	
+	# Log the sea level change
+	if _logger:
+		_logger.log_info(
+			"TerrainRenderer",
+			"Sea level changed, updating chunks",
+			{
+				"normalized": "%.3f" % normalized,
+				"meters": "%.1f" % meters,
+				"chunk_count": str(_chunk_manager.get_chunk_count())
+			}
+		)
+	
+	# Update all loaded chunks with new sea level
+	var loaded_chunks = _chunk_manager.get_loaded_chunks()
+	var updated_count = 0
+	
+	for chunk_coord in loaded_chunks:
+		var chunk = _chunk_manager.get_chunk(chunk_coord)
+		if chunk and chunk.material:
+			chunk.material.set_shader_parameter("sea_level", meters)
+			updated_count += 1
+	
+	# Log completion
+	if _logger:
+		_logger.log_info(
+			"TerrainRenderer",
+			"Chunk shader parameters updated",
+			{
+				"updated_chunks": str(updated_count),
+				"total_chunks": str(loaded_chunks.size())
+			}
+		)
+	
+	if LogRouter:
+		LogRouter.log(
+			"TerrainRenderer: Updated %d chunks with new sea level: %.1fm" % [updated_count, meters],
+			LogRouter.LogLevel.INFO,
+			"terrain"
+		)
 
 
 # ============================================================================
