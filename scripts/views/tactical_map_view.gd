@@ -662,8 +662,8 @@ func _generate_terrain_texture() -> void:
 	print("TacticalMapView: Found elevation provider, generating preview...")
 
 	# Generate a preview texture from the elevation data
-	# Use a smaller resolution for speed (128x128) then upscale
-	var preview_size = 128
+	# Using 256x256 for a good balance of sharpness and generation speed (~400ms)
+	var preview_size = 256
 	
 	# Calculate world size needed to cover screen + 20% margin
 	var viewport_size = get_viewport().get_visible_rect().size
