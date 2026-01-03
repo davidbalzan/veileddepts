@@ -332,18 +332,22 @@ func _create_chunk_mesh(chunk: TerrainChunk) -> void:
 	# Add mesh instance as child of chunk
 	chunk.add_child(chunk.mesh_instance)
 
+	var vertex_count = 0
+	if mesh.get_surface_count() > 0:
+		vertex_count = mesh.surface_get_array_len(0)
+
+	# Get Y range of the mesh for debug
+	var aabb = mesh.get_aabb()
+	print("ChunkManager: Created mesh for chunk %s at world pos %s, AABB Y: [%.0f, %.0f], vertices: %d" % [
+		chunk.chunk_coord, chunk.position, aabb.position.y, aabb.position.y + aabb.size.y, vertex_count
+	])
+
 	if _logger:
-		var vertex_count = 0
-		if mesh.get_surface_count() > 0:
-			vertex_count = mesh.surface_get_array_len(0)
-			
 		_logger.log_info(
 			"ChunkManager",
 			"Created mesh for chunk",
 			{"chunk": chunk.chunk_coord, "surfaces": str(mesh.get_surface_count()), "vertices": str(vertex_count)}
 		)
-	else:
-		print("ChunkManager: Created mesh for chunk %s" % chunk.chunk_coord)
 
 
 ## Update LRU list when chunk is accessed

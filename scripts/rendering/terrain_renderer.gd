@@ -32,7 +32,7 @@ class_name TerrainRenderer extends Node3D
 @export_group("Elevation Data")
 @export var elevation_map_path: String = "res://src_assets/World_elevation_map.png"
 @export var use_external_heightmap: bool = true  # Use world elevation map
-@export var heightmap_region: Rect2 = Rect2(0.25, 0.3, 0.1, 0.1)  # Region to use
+@export var heightmap_region: Rect2 = Rect2(0.47, 0.38, 0.1, 0.1)  # Mediterranean Sea near coast
 
 @export_group("Debug")
 @export var enable_debug_overlay: bool = false  # Show debug visualization
@@ -212,12 +212,22 @@ func set_submarine(submarine: Node3D) -> void:
 		push_warning("TerrainRenderer: Submarine reference set to null")
 
 
+var _debug_frame_counter: int = 0
+
 func _process(_delta: float) -> void:
 	if not initialized or not _streaming_manager or not _submarine:
 		return
 
 	# Update streaming based on submarine position
 	_streaming_manager.update(_submarine.global_position)
+
+	# Debug: Print chunk status every 120 frames (2 seconds at 60fps)
+	_debug_frame_counter += 1
+	if _debug_frame_counter >= 120:
+		_debug_frame_counter = 0
+		if _chunk_manager:
+			var chunk_count = _chunk_manager.get_chunk_count()
+			print("TerrainRenderer DEBUG: %d chunks loaded, sub at %s" % [chunk_count, _submarine.global_position])
 
 
 # ============================================================================

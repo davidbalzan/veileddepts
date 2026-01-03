@@ -9,8 +9,14 @@ var tile_cache: Dictionary = {}  # Vector2i -> ImageTexture
 var tile_size: int = 2048  # Size of each tile
 var max_cached_tiles: int = 16  # Maximum number of tiles to keep in memory
 var _scaled_map_texture: ImageTexture = null  # Downscaled version for display
-var _colorizer_material: ShaderMaterial = null
 var icon_overlay: Control = null
+var map_background: TextureRect = null
+
+# Sea level control
+var sea_level_threshold: float = 0.554  # Default sea level (0-1 range)
+var _sea_level_slider: HSlider = null
+var _debug_panel: PanelContainer = null
+var _debug_visible: bool = false
 
 # State for "resample on zoom" detail texture
 var _detail_texture: ImageTexture = null
@@ -59,6 +65,7 @@ func _ready() -> void:
 
 	_create_background_node()
 	_create_overlay_node()
+	_create_debug_panel()
 	
 	if global_map_image:
 		_create_optimized_map()
@@ -78,7 +85,6 @@ func _create_optimized_map() -> void:
 	var target_height = int(source_h / scale_w)
 	
 	var color_image = Image.create(target_width, target_height, false, Image.FORMAT_RGBA8)
-	var sea_level_threshold = 0.554
 	
 	# Sample directly from large image to avoid huge duplicates
 	for y in range(target_height):
@@ -140,7 +146,7 @@ func _create_ui_elements() -> void:
 		if child.name in ["ControlPanel", "SubmarineInfo", "RecenterButton", "TerrainToggle"]:
 			child.visible = false
 		if child is Label and child.name == "Instructions":
-			child.text = "F2: Close | Left Click: Teleport | Right Click/Middle: Pan | Wheel: Zoom"
+			child.text = "F2: Close | F3: Debug Panel | F4: All Debug | Left Click: Teleport | Right Click/Middle: Pan | Wheel: Zoom"
 
 	# Add elevation info label
 	var elev_label = Label.new()
@@ -165,6 +171,136 @@ func _create_overlay_node() -> void:
 	icon_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	map_canvas.add_child(icon_overlay)
 	icon_overlay.draw.connect(_on_icon_overlay_draw)
+
+
+func _create_debug_panel() -> void:
+	"""Create debug panel with sea level slider and debug info"""
+	_debug_panel = PanelContainer.new()
+	_debug_panel.name = "DebugPanel"
+	
+	# Position in top-right corner
+	_debug_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_debug_panel.position = Vector2(-320, 60)
+	_debug_panel.custom_minimum_size = Vector2(300, 0)
+	
+	# Style the panel
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.1, 0.1, 0.1, 0.9)
+	style_box.border_color = Color(0, 1, 1, 1)
+	style_box.set_border_width_all(2)
+	style_box.set_corner_radius_all(5)
+	style_box.content_margin_left = 10
+	style_box.content_margin_right = 10
+	style_box.content_margin_top = 10
+	style_box.content_margin_bottom = 10
+	_debug_panel.add_theme_stylebox_override("panel", style_box)
+	
+	# Create content container
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	_debug_panel.add_child(vbox)
+	
+	# Title
+	var title = Label.new()
+	title.text = "DEBUG CONTROLS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(0, 1, 1, 1))
+	vbox.add_child(title)
+	
+	# Separator
+	var separator1 = HSeparator.new()
+	vbox.add_child(separator1)
+	
+	# Sea Level Control Section
+	var sea_level_label = Label.new()
+	sea_level_label.text = "Sea Level Threshold"
+	sea_level_label.add_theme_font_size_override("font_size", 14)
+	sea_level_label.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(sea_level_label)
+	
+	# Sea level value display
+	var sea_level_value = Label.new()
+	sea_level_value.name = "SeaLevelValue"
+	sea_level_value.text = "%.3f (Default: 0.554)" % sea_level_threshold
+	sea_level_value.add_theme_font_size_override("font_size", 12)
+	sea_level_value.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
+	vbox.add_child(sea_level_value)
+	
+	# Sea level slider
+	_sea_level_slider = HSlider.new()
+	_sea_level_slider.name = "SeaLevelSlider"
+	_sea_level_slider.min_value = 0.0
+	_sea_level_slider.max_value = 1.0
+	_sea_level_slider.step = 0.001
+	_sea_level_slider.value = sea_level_threshold
+	_sea_level_slider.custom_minimum_size = Vector2(280, 20)
+	_sea_level_slider.value_changed.connect(_on_sea_level_changed)
+	vbox.add_child(_sea_level_slider)
+	
+	# Separator
+	var separator2 = HSeparator.new()
+	vbox.add_child(separator2)
+	
+	# Debug Info Section
+	var debug_info_label = Label.new()
+	debug_info_label.text = "Map Information"
+	debug_info_label.add_theme_font_size_override("font_size", 14)
+	debug_info_label.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(debug_info_label)
+	
+	# Map size info
+	var map_info = Label.new()
+	map_info.name = "MapInfo"
+	if global_map_image:
+		map_info.text = "Size: %dx%d pixels\nZoom: %.2fx\nTiles Cached: 0/%d" % [
+			global_map_image.get_width(),
+			global_map_image.get_height(),
+			map_zoom,
+			max_cached_tiles
+		]
+	else:
+		map_info.text = "Map: Not Loaded"
+	map_info.add_theme_font_size_override("font_size", 11)
+	map_info.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
+	vbox.add_child(map_info)
+	
+	# Separator
+	var separator3 = HSeparator.new()
+	vbox.add_child(separator3)
+	
+	# Debug Panel Toggle Buttons
+	var button_container = HBoxContainer.new()
+	button_container.add_theme_constant_override("separation", 5)
+	vbox.add_child(button_container)
+	
+	# Toggle Performance Panel
+	var perf_button = Button.new()
+	perf_button.text = "Performance"
+	perf_button.custom_minimum_size = Vector2(135, 30)
+	perf_button.pressed.connect(_on_toggle_performance_panel)
+	button_container.add_child(perf_button)
+	
+	# Toggle Terrain Debug
+	var terrain_button = Button.new()
+	terrain_button.text = "Terrain"
+	terrain_button.custom_minimum_size = Vector2(135, 30)
+	terrain_button.pressed.connect(_on_toggle_terrain_panel)
+	button_container.add_child(terrain_button)
+	
+	# Instructions
+	var instructions = Label.new()
+	instructions.text = "F3: Toggle This Panel\nF4: Toggle All Debug"
+	instructions.add_theme_font_size_override("font_size", 10)
+	instructions.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1))
+	instructions.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(instructions)
+	
+	# Add to scene
+	add_child(_debug_panel)
+	_debug_panel.visible = _debug_visible
+	
+	print("WholeMapView: Debug panel created")
 
 
 ## Get or create a tile texture for a specific region
@@ -442,6 +578,9 @@ func _process(_delta: float) -> void:
 		# Update elevation info
 		_update_elevation_info()
 		
+		# Update debug panel info
+		_update_debug_panel_info()
+		
 		# Better resampling logic for World Map Detail
 		var zoom_changed = abs(map_zoom - _last_resample_zoom) / _last_resample_zoom > 0.1
 		var pan_changed = map_pan_offset.distance_to(_last_resample_pan) > (100.0 / map_zoom)
@@ -483,6 +622,22 @@ func _update_elevation_info() -> void:
 		label.add_theme_color_override("font_color", Color.CYAN)
 
 
+func _update_debug_panel_info() -> void:
+	"""Update debug panel information"""
+	if not _debug_panel or not _debug_visible:
+		return
+	
+	var map_info = _debug_panel.find_child("MapInfo", true, false)
+	if map_info and global_map_image:
+		map_info.text = "Size: %dx%d pixels\nZoom: %.2fx\nTiles Cached: %d/%d" % [
+			global_map_image.get_width(),
+			global_map_image.get_height(),
+			map_zoom,
+			tile_cache.size(),
+			max_cached_tiles
+		]
+
+
 func _uv_to_screen(uv: Vector2) -> Vector2:
 	if not global_map_image: return Vector2.ZERO
 	
@@ -507,6 +662,17 @@ func _uv_to_screen(uv: Vector2) -> Vector2:
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
+
+	# F3 to toggle debug panel
+	if event is InputEventKey:
+		var key_event = event as InputEventKey
+		if key_event.pressed and not key_event.echo:
+			if key_event.keycode == KEY_F3:
+				_toggle_debug_panel()
+				return
+			elif key_event.keycode == KEY_F4:
+				_toggle_all_debug_panels()
+				return
 
 	# Simple mouse click for teleportation
 	if event is InputEventMouseButton:
@@ -557,3 +723,52 @@ func _input(event: InputEvent) -> void:
 func _handle_zoom(zoom_factor: float, _mouse_pos: Vector2 = Vector2.ZERO) -> void:
 	map_zoom *= zoom_factor
 	map_zoom = clamp(map_zoom, 1.0, 100.0)
+
+
+## Debug panel callbacks
+
+func _toggle_debug_panel() -> void:
+	"""Toggle the debug panel visibility"""
+	_debug_visible = not _debug_visible
+	if _debug_panel:
+		_debug_panel.visible = _debug_visible
+	print("WholeMapView: Debug panel toggled: ", _debug_visible)
+
+
+func _toggle_all_debug_panels() -> void:
+	"""Toggle all debug panels via DebugPanelManager"""
+	if DebugPanelManager:
+		if DebugPanelManager.is_debug_enabled():
+			DebugPanelManager.disable_all()
+		else:
+			DebugPanelManager.enable_all()
+
+
+func _on_toggle_performance_panel() -> void:
+	"""Toggle the performance debug panel"""
+	if DebugPanelManager:
+		DebugPanelManager.toggle_panel("performance")
+
+
+func _on_toggle_terrain_panel() -> void:
+	"""Toggle the terrain debug panel"""
+	if DebugPanelManager:
+		DebugPanelManager.toggle_panel("terrain")
+
+
+func _on_sea_level_changed(value: float) -> void:
+	"""Called when sea level slider changes"""
+	sea_level_threshold = value
+	
+	# Update the value label
+	if _debug_panel:
+		var value_label = _debug_panel.find_child("SeaLevelValue", true, false)
+		if value_label:
+			value_label.text = "%.3f (Default: 0.554)" % value
+	
+	# Regenerate the map with new sea level
+	if global_map_image:
+		_create_optimized_map()
+		_generate_detail_texture()
+	
+	print("WholeMapView: Sea level threshold changed to %.3f" % value)
