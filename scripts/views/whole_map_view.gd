@@ -98,8 +98,6 @@ func _create_optimized_map() -> void:
 			color_image.set_pixel(x, y, color)
 	
 	_scaled_map_texture = ImageTexture.create_from_image(color_image)
-	if map_background:
-		map_background.texture = _scaled_map_texture
 	print("WholeMapView: Colorized overview map created successfully (%dx%d)" % [target_width, target_height])
 
 

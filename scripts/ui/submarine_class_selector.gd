@@ -7,8 +7,8 @@ func _ready() -> void:
 	var main = get_node("/root/Main")
 	if main and main.has_method("get_available_submarine_classes"):
 		var classes = main.get_available_submarine_classes()
-		for class_name in classes:
-			add_item(class_name)
+		for submarine_class_name in classes:
+			add_item(submarine_class_name)
 
 	# Connect selection signal
 	item_selected.connect(_on_class_selected)
