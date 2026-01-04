@@ -185,6 +185,13 @@ func _create_ui() -> void:
 		init_wind_dir = ocean_renderer.wind_direction_degrees
 		init_time_scale = ocean_renderer.time_scale
 
+	# Visibility Toggles
+	_add_section_label(vbox, "Visibility")
+	_add_checkbox(vbox, "Show Ocean", true, _on_ocean_visibility_changed)
+	_add_checkbox(vbox, "Show Atmosphere", true, _on_atmosphere_visibility_changed)
+
+	vbox.add_child(HSeparator.new())
+
 	# Wave Settings
 	_add_section_label(vbox, "Wave Settings")
 
@@ -258,6 +265,24 @@ func _add_section_label(parent: Control, text: String) -> void:
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
 	parent.add_child(label)
+
+
+func _add_checkbox(
+	parent: Control,
+	label_text: String,
+	default_val: bool,
+	callback: Callable
+) -> CheckBox:
+	var hbox = HBoxContainer.new()
+	parent.add_child(hbox)
+
+	var checkbox = CheckBox.new()
+	checkbox.text = label_text
+	checkbox.button_pressed = default_val
+	checkbox.toggled.connect(callback)
+	hbox.add_child(checkbox)
+
+	return checkbox
 
 
 func _add_slider(
@@ -336,6 +361,18 @@ func _on_time_scale_changed(value: float) -> void:
 func _on_time_of_day_changed(value: float) -> void:
 	if atmosphere_renderer:
 		atmosphere_renderer.set_time_of_day(value)
+
+
+func _on_ocean_visibility_changed(visible: bool) -> void:
+	if ocean_renderer:
+		ocean_renderer.visible = visible
+		print("OceanDebugUI: Ocean visibility set to ", visible)
+
+
+func _on_atmosphere_visibility_changed(visible: bool) -> void:
+	if atmosphere_renderer:
+		atmosphere_renderer.visible = visible
+		print("OceanDebugUI: Atmosphere visibility set to ", visible)
 
 
 func _on_max_height_changed(value: float) -> void:
