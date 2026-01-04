@@ -363,10 +363,13 @@ func _on_time_of_day_changed(value: float) -> void:
 		atmosphere_renderer.set_time_of_day(value)
 
 
-func _on_ocean_visibility_changed(visible: bool) -> void:
+func _on_ocean_visibility_changed(is_visible: bool) -> void:
 	if ocean_renderer:
-		ocean_renderer.visible = visible
-		print("OceanDebugUI: Ocean visibility set to ", visible)
+		ocean_renderer.visible = is_visible
+		# Also hide the quad_tree directly (the actual rendering mesh)
+		if ocean_renderer.quad_tree:
+			ocean_renderer.quad_tree.visible = is_visible
+		print("OceanDebugUI: Ocean visibility set to ", is_visible)
 
 
 func _on_atmosphere_visibility_changed(visible: bool) -> void:
