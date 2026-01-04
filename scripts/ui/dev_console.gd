@@ -571,13 +571,36 @@ func _handle_terrain_command(action: String) -> void:
 				if chunk_manager:
 					status_msg += "Loaded chunks: %d\n" % chunk_manager.get_chunk_count()
 					status_msg += "Memory usage: %.1f MB\n" % chunk_manager.get_memory_usage_mb()
+					
+					# Check first chunk for visibility
+					var loaded_chunks = chunk_manager.get_loaded_chunks()
+					if not loaded_chunks.is_empty():
+						var first_chunk_coord = loaded_chunks[0]
+						var first_chunk = chunk_manager.get_chunk(first_chunk_coord)
+						if first_chunk:
+							status_msg += "\nFirst chunk (%s):\n" % first_chunk_coord
+							status_msg += "  Visible: %s\n" % first_chunk.visible
+							status_msg += "  Position: %s\n" % first_chunk.global_position
+							if first_chunk.mesh_instance:
+								status_msg += "  Has mesh: YES\n"
+								status_msg += "  Mesh visible: %s\n" % first_chunk.mesh_instance.visible
+								status_msg += "  Mesh layers: %d\n" % first_chunk.mesh_instance.layers
+								if first_chunk.mesh_instance.mesh:
+									var aabb = first_chunk.mesh_instance.mesh.get_aabb()
+									status_msg += "  AABB: %s\n" % aabb
+							else:
+								status_msg += "  Has mesh: NO\n"
+							if first_chunk.material:
+								status_msg += "  Has material: YES\n"
+							else:
+								status_msg += "  Has material: NO\n"
 				else:
 					status_msg += "ChunkManager: NOT FOUND\n"
 				
 				# Get streaming manager info
 				var streaming_manager = terrain_renderer.get_node_or_null("StreamingManager")
 				if streaming_manager:
-					status_msg += "Streaming: ACTIVE\n"
+					status_msg += "\nStreaming: ACTIVE\n"
 					status_msg += "Load distance: %.1f m\n" % terrain_renderer.load_distance
 				else:
 					status_msg += "StreamingManager: NOT FOUND\n"
