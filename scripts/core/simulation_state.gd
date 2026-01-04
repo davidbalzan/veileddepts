@@ -19,8 +19,8 @@ var target_heading: float = 0.0  # Target heading for propulsion
 
 ## Submarine operational limits
 const MAX_SPEED: float = 10.3  # 20 knots in m/s
-const MAX_DEPTH: float = 400.0  # meters
-const MIN_DEPTH: float = 0.0  # surface
+const MAX_DEPTH: float = 400.0  # meters below sea level
+const MIN_DEPTH: float = -50.0  # meters below sea level (negative = above water)
 
 ## Contact tracking
 var contacts: Array[Contact] = []
