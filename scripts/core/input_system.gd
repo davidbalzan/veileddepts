@@ -37,7 +37,8 @@ var default_bindings: Dictionary = {
 	"depth_increase": [KEY_E],  # Go deeper
 	"emergency_stop": [KEY_SPACE],
 	"show_input_config": [KEY_F4],  # Show input configuration UI
-	"toggle_terrain_debug": [KEY_F5]  # Toggle terrain debug overlay
+	"toggle_terrain_debug": [KEY_F5],  # Toggle terrain debug overlay
+	"toggle_physics_debug": [KEY_F6]  # Toggle physics debug output
 }
 
 ## Speed and heading control parameters
@@ -174,6 +175,9 @@ func _handle_global_submarine_controls(event: InputEvent) -> bool:
 	elif _is_key_bound_to_action(key_event.keycode, "toggle_terrain_debug"):
 		_toggle_terrain_debug()
 		return true
+	elif _is_key_bound_to_action(key_event.keycode, "toggle_physics_debug"):
+		_toggle_physics_debug()
+		return true
 
 	return false
 
@@ -262,7 +266,18 @@ func _toggle_terrain_debug() -> void:
 	if terrain_renderer and terrain_renderer.has_method("toggle_debug_overlay"):
 		terrain_renderer.toggle_debug_overlay()
 	else:
-		print("InputSystem: TerrainRenderer or toggle_debug_overlay not found")
+		print("InputSystem: TerrainRenderer not found or toggle_debug_overlay not available")
+
+
+## Toggle physics debug output (F6)
+func _toggle_physics_debug() -> void:
+	var main = get_parent()
+	var submarine_physics = main.get_node_or_null("SubmarinePhysicsV2")
+	if submarine_physics:
+		submarine_physics.debug_mode = not submarine_physics.debug_mode
+		print("Physics debug: %s (F6 to toggle)" % ("ENABLED" if submarine_physics.debug_mode else "disabled"))
+	else:
+		print("InputSystem: SubmarinePhysicsV2 not found")
 
 
 ## Handle view toggle input
@@ -499,7 +514,8 @@ func _create_binding_entries(container: VBoxContainer) -> void:
 		"depth_increase": "Increase Depth (Deeper)",
 		"emergency_stop": "Emergency Stop",
 		"show_input_config": "Show Input Configuration",
-		"toggle_terrain_debug": "Toggle Terrain Debug"
+		"toggle_terrain_debug": "Toggle Terrain Debug",
+		"toggle_physics_debug": "Toggle Physics Debug (F6)"
 	}
 
 	for action in default_bindings.keys():

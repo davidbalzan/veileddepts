@@ -29,8 +29,8 @@ const MAX_ELEVATION: float = 100.0    # Mission area maximum (meters)
 const MARIANA_TRENCH_DEPTH: float = -10994.0  # Lowest point on Earth (meters)
 const MOUNT_EVEREST_HEIGHT: float = 8849.0    # Highest point on Earth (meters)
 
-# Default sea level - using mission area scale for consistency with terrain system
-const DEFAULT_SEA_LEVEL: float = 0.6667  # Normalized value for 0m elevation: (0 - (-200)) / (100 - (-200)) = 200/300
+# Default sea level - calibrated value that matches real-world coastlines
+const DEFAULT_SEA_LEVEL: float = 0.562  # Normalized value for accurate coastline representation
 
 # Performance constants
 const UPDATE_THROTTLE_MS: float = 100.0  # Minimum time between updates (milliseconds)
