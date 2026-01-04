@@ -18,7 +18,7 @@ var initialized: bool = false
 
 @export_group("LOD Settings")
 @export var lod_level: int = 6
-@export var quad_size: float = 16384.0
+@export var quad_size: float = 4096.0  # Reduced from 16384 to avoid occluding distant coastlines
 @export var mesh_vertex_resolution: int = 128
 
 @export_group("Ocean Level")

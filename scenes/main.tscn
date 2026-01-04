@@ -120,7 +120,7 @@ wind_direction_degrees = 45.0
 choppiness = 1.5
 fft_resolution_index = 1
 lod_level = 6
-quad_size = 16384.0
+quad_size = 4096.0
 
 [node name="TerrainRenderer" type="Node3D" parent="." groups=["terrain_renderer"]]
 script = ExtResource("14_terrain_renderer")

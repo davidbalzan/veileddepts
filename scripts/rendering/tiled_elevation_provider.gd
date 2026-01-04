@@ -68,7 +68,8 @@ class LODCache:
 	func preload_world_overview() -> void:
 		print("LODCache: Pre-loading world overview images...")
 		for lod in range(4):
-			var resolution = 256 >> lod  # 256, 128, 64, 32
+			var resolution = 512 >> lod  # 512, 256, 128, 64 (increased from 256 base)
+			resolution = maxi(resolution, 128)  # Enforce minimum 128x128
 			world_overview[lod] = _generate_world_overview(lod, resolution)
 			if world_overview[lod]:
 				print("  LOD %d: %dx%d" % [lod, resolution, resolution])
@@ -533,10 +534,11 @@ func extract_region_lod(world_bounds: Rect2, lod_level: int) -> Image:
 	lod_level = clampi(lod_level, 0, max_lod_levels - 1)
 	
 	# Calculate resolution based on LOD level
-	# LOD 0 = 256, LOD 1 = 128, LOD 2 = 64, LOD 3 = 32
-	var base_resolution = 256
+	# LOD 0 = 512, LOD 1 = 256, LOD 2 = 128, LOD 3 = 128 (minimum enforced)
+	# Increased base resolution from 256 to 512 to reduce pixelation in tactical map
+	var base_resolution = 512
 	var resolution = base_resolution >> lod_level
-	resolution = maxi(resolution, 16)  # Minimum 16x16
+	resolution = maxi(resolution, 128)  # Minimum 128x128 (increased from 16x16)
 	
 	return extract_region(world_bounds, resolution)
 
