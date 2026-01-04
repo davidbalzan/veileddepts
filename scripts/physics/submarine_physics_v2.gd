@@ -273,6 +273,13 @@ func update_physics(delta: float) -> void:
 	if is_finite(ballast_force):
 		submarine_body.apply_central_force(Vector3(0, -ballast_force, 0))  # Negative because ballast is positive down
 
+	# Debug output for ascent troubleshooting (every 60 frames)
+	if debug_mode and Engine.get_process_frames() % 60 == 0:
+		var buoy_y = buoyancy_result.force.y if buoyancy_result else 0.0
+		print("[PhysicsV2] depth=%.1fm, target=%.1fm, vel_y=%.2f, ballast=%.0fN, buoyancy=%.0fN" % [
+			depth, target_depth, vertical_velocity, -ballast_force, buoy_y
+		])
+
 	# Step 9: Apply sideways velocity elimination - Requirement 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
 	_apply_sideways_velocity_elimination(forward_dir)
 

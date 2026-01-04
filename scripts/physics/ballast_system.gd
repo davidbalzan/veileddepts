@@ -11,13 +11,13 @@ extends RefCounted
 
 # Configuration parameters
 var max_ballast_force: float = 50000000.0  # Maximum vertical force (N)
-var kp: float = 0.3  # Proportional gain
-var ki: float = 0.005  # Integral gain
-var kd: float = 1.2  # Derivative gain
+var kp: float = 0.5  # Proportional gain (increased for faster response)
+var ki: float = 0.01  # Integral gain (increased for sustained depth errors)
+var kd: float = 1.5  # Derivative gain (increased for rate control)
 var dead_zone: float = 0.5  # Depth tolerance (meters)
 var vertical_damping_coefficient: float = 80000.0  # Damping force coefficient
-var max_depth_rate: float = 5.0  # Maximum desired depth rate (m/s)
-var depth_rate_gain: float = 0.1  # Gain for converting depth error to desired rate
+var max_depth_rate: float = 6.0  # Maximum desired depth rate (m/s)
+var depth_rate_gain: float = 0.2  # Gain for converting depth error to desired rate
 var ballast_lerp_rate: float = 0.1  # Smoothing rate for ballast force changes
 
 # PID state

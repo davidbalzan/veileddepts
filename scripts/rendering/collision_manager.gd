@@ -375,9 +375,9 @@ func _sample_heightmap_bilinear(heightmap: Image, u: float, v: float) -> float:
 	return result
 
 
-# Constants for vertical scaling (must match ElevationDataProvider)
-const MARIANA_TRENCH_DEPTH: float = -10994.0
-const MOUNT_EVEREST_HEIGHT: float = 8849.0
+# Constants for vertical scaling - MUST MATCH ChunkRenderer mission area range!
+const MIN_ELEVATION: float = -200.0  # Mission area minimum (meters)
+const MAX_ELEVATION: float = 100.0   # Mission area maximum (meters)
 
 
 ## Get height value from a pixel in the heightmap (scaled to world units)
@@ -390,9 +390,9 @@ func _get_pixel_height(heightmap: Image, x: int, y: int) -> float:
 	var color: Color = heightmap.get_pixel(x, y)
 	# Red channel contains normalized height (0.0 to 1.0)
 	var normalized_height: float = color.r
-	
-	# Scale to world units
-	return lerpf(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, normalized_height)
+
+	# Scale to world units using mission area range (matches ChunkRenderer)
+	return lerpf(MIN_ELEVATION, MAX_ELEVATION, normalized_height)
 
 
 ## Estimate height from nearest loaded chunk
