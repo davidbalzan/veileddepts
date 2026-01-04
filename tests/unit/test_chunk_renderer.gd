@@ -185,3 +185,50 @@ func test_mesh_generation_consistency():
 		mesh2.get_surface_count(),
 		"Meshes should have same surface count"
 	)
+
+
+func test_material_uses_sea_level_manager():
+	# Test that materials query SeaLevelManager for current sea level
+	# Set a specific sea level
+	if SeaLevelManager:
+		SeaLevelManager.set_sea_level(0.6)  # Above default
+		
+		# Create material
+		var material = chunk_renderer.create_chunk_material(test_biome_map, test_bump_map)
+		
+		assert_not_null(material, "Should create a material")
+		
+		# Check that sea_level parameter matches manager's value
+		var sea_level_param = material.get_shader_parameter("sea_level")
+		var expected_sea_level = SeaLevelManager.get_sea_level_meters()
+		
+		assert_almost_eq(sea_level_param, expected_sea_level, 0.01, 
+			"Material sea_level should match SeaLevelManager value")
+		
+		# Reset to default
+		SeaLevelManager.reset_to_default()
+	else:
+		fail_test("SeaLevelManager not available")
+
+
+func test_material_sea_level_with_different_values():
+	# Test that materials reflect different sea level values
+	if SeaLevelManager:
+		# Test with low sea level
+		SeaLevelManager.set_sea_level(0.4)
+		var material_low = chunk_renderer.create_chunk_material(test_biome_map, test_bump_map)
+		var sea_level_low = material_low.get_shader_parameter("sea_level")
+		
+		# Test with high sea level
+		SeaLevelManager.set_sea_level(0.7)
+		var material_high = chunk_renderer.create_chunk_material(test_biome_map, test_bump_map)
+		var sea_level_high = material_high.get_shader_parameter("sea_level")
+		
+		# High sea level should be greater than low sea level
+		assert_gt(sea_level_high, sea_level_low, 
+			"Higher normalized sea level should result in higher meter value")
+		
+		# Reset to default
+		SeaLevelManager.reset_to_default()
+	else:
+		fail_test("SeaLevelManager not available")

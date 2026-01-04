@@ -288,6 +288,7 @@ func update_physics(delta: float) -> void:
 
 ## Get current submarine state for synchronization
 ## Requirement 17.3: Same interface as SubmarinePhysics
+## Validates: Requirement 9.1 (depth reading relative to sea level)
 func get_submarine_state() -> Dictionary:
 	if not submarine_body:
 		return {}
@@ -295,8 +296,9 @@ func get_submarine_state() -> Dictionary:
 	var pos = submarine_body.global_position
 	var vel = submarine_body.linear_velocity
 
-	# Calculate depth (negative Y position)
-	var depth = -pos.y
+	# Calculate depth relative to current sea level (Requirement 9.1)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var depth = sea_level_meters - pos.y  # Depth is positive going down from sea level
 
 	# Calculate horizontal speed (exclude vertical component)
 	var horizontal_velocity = Vector2(vel.x, vel.z)

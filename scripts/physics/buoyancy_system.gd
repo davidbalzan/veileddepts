@@ -57,13 +57,18 @@ func _init(config: Dictionary = {}):
 ##   Dictionary with:
 ##     - force: Buoyancy force vector (Vector3)
 ##     - torque: Wave-induced torque vector (Vector3)
+##
+## Validates: Requirements 9.1, 9.5 (dynamic sea level)
 func calculate_buoyancy_force(
 	position: Vector3, velocity: Vector3, target_depth: float, ocean_renderer
 ) -> Dictionary:
 	var result = {"force": Vector3.ZERO, "torque": Vector3.ZERO}
 
-	# Requirement 9.1: Get wave height from ocean renderer
-	var wave_height: float = 0.0
+	# Requirement 9.5: Get current sea level from SeaLevelManager
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+
+	# Requirement 9.1: Get wave height from ocean renderer (relative to current sea level)
+	var wave_height: float = sea_level_meters  # Default to current sea level
 	if ocean_renderer and ocean_renderer.has_method("get_wave_height_3d"):
 		wave_height = ocean_renderer.get_wave_height_3d(position)
 

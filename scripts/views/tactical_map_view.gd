@@ -75,6 +75,13 @@ func _ready() -> void:
 				if terrain_renderer.has_signal("mission_area_changed"):
 					terrain_renderer.mission_area_changed.connect(_on_mission_area_changed)
 
+	# Connect to SeaLevelManager for dynamic sea level updates
+	if SeaLevelManager:
+		SeaLevelManager.sea_level_changed.connect(_on_sea_level_changed)
+		print("TacticalMapView: Connected to SeaLevelManager")
+	else:
+		push_warning("TacticalMapView: SeaLevelManager not found")
+
 	print("TacticalMapView: Initialized")
 
 
@@ -82,6 +89,18 @@ func _on_mission_area_changed(_new_region: Rect2) -> void:
 	print("TacticalMapView: Mission area changed, resetting terrain texture...")
 	terrain_texture = null
 	_terrain_generation_attempted = false
+
+
+## Handle sea level changes from SeaLevelManager
+func _on_sea_level_changed(normalized: float, meters: float) -> void:
+	print("TacticalMapView: Sea level changed to %.3f (%.0fm), regenerating map texture..." % [normalized, meters])
+	# Regenerate tactical map with new sea level threshold
+	if terrain_renderer and terrain_renderer.initialized:
+		_generate_terrain_texture()
+	else:
+		# Mark for regeneration when terrain becomes available
+		terrain_texture = null
+		_terrain_generation_attempted = false
 
 
 func _initialize_terrain_deferred() -> void:
@@ -715,12 +734,15 @@ func _generate_terrain_texture() -> void:
 			
 	print("TacticalMapView: Local elevation range for tactical map: [%.1f, %.1f]" % [local_min, local_max])
 
+	# Get current sea level from manager
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	print("TacticalMapView: Using sea level: %.0fm for map colorization" % sea_level_meters)
+
 	# Colorize on CPU with dynamic range for better contrast in deep water
 	terrain_image = Image.create(preview_size, preview_size, false, Image.FORMAT_RGBA8)
 	
 	# Color palette
 	var abyss_color = Color(0.00, 0.02, 0.10, 1.0)     # Deepest part of local area
-	var mid_blue = Color(0.05, 0.20, 0.50, 1.0)        # Mid part of local area
 	var shallow_blue = Color(0.20, 0.40, 0.80, 1.0)     # shallowest part of local area
 	var beach = Color(0.80, 0.75, 0.55, 1.0)            # 0m
 	var mount = Color(0.60, 0.60, 0.60, 1.0)            # high land
@@ -748,14 +770,14 @@ func _generate_terrain_texture() -> void:
 				else:
 					color = mid_deep.lerp(shelf, (t - 0.5) * 2.0)
 			else:
-				# Use standard scheme near coastline
-				if elevation < -500.0:
+				# Use standard scheme near coastline, adjusted for current sea level
+				if elevation < sea_level_meters - 500.0:
 					color = abyss_color
-				elif elevation < 0.0:
-					var t = (elevation - (-500.0)) / 500.0
+				elif elevation < sea_level_meters:
+					var t = (elevation - (sea_level_meters - 500.0)) / 500.0
 					color = abyss_color.lerp(shallow_blue, t)
-				elif elevation < 100.0:
-					var t = elevation / 100.0
+				elif elevation < sea_level_meters + 100.0:
+					var t = (elevation - sea_level_meters) / 100.0
 					color = beach.lerp(Color.DARK_GREEN, t)
 				else:
 					color = mount

@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 LogRouter="*res://scripts/core/log_router.gd"
 DebugPanelManager="*res://scripts/debug/debug_panel_manager.gd"
+SeaLevelManager="*res://scripts/core/sea_level_manager.gd"
 
 [display]
 

@@ -386,13 +386,35 @@ func _on_ocean_visibility_changed(is_visible: bool) -> void:
 		if particles:
 			particles.visible = is_visible
 
+	# Change background to show terrain clearly when ocean is hidden
+	if atmosphere_renderer and atmosphere_renderer.environment:
+		if is_visible:
+			# Restore sky background
+			atmosphere_renderer.environment.background_mode = Environment.BG_SKY
+		else:
+			# Use solid color background to see terrain clearly
+			atmosphere_renderer.environment.background_mode = Environment.BG_COLOR
+			atmosphere_renderer.environment.background_color = Color(0.15, 0.15, 0.15)  # Neutral gray
+
 	print("OceanDebugUI: Ocean/sea visibility set to ", is_visible)
 
 
-func _on_atmosphere_visibility_changed(visible: bool) -> void:
+func _on_atmosphere_visibility_changed(is_visible: bool) -> void:
 	if atmosphere_renderer:
-		atmosphere_renderer.visible = visible
-		print("OceanDebugUI: Atmosphere visibility set to ", visible)
+		# WorldEnvironment doesn't have a visible property
+		# Instead, we enable/disable the environment itself
+		if is_visible:
+			# Restore the environment if we stored one
+			if atmosphere_renderer.has_meta("_stored_environment"):
+				atmosphere_renderer.environment = atmosphere_renderer.get_meta("_stored_environment")
+				atmosphere_renderer.remove_meta("_stored_environment")
+		else:
+			# Store and disable the environment
+			if atmosphere_renderer.environment:
+				atmosphere_renderer.set_meta("_stored_environment", atmosphere_renderer.environment)
+				atmosphere_renderer.environment = null
+		
+		print("OceanDebugUI: Atmosphere visibility set to ", is_visible)
 
 
 func _on_max_height_changed(value: float) -> void:

@@ -265,6 +265,9 @@ func _execute_command(command_text: String) -> void:
 			"relocate":
 				# Handle relocate command
 				_handle_relocate_command(result.data)
+			"terrain":
+				# Handle terrain command
+				_handle_terrain_command(result.data)
 			_:
 				# For other commands, just log the result message
 				_log_router.log(result.message, LogRouter.LogLevel.INFO, "console")
@@ -540,3 +543,58 @@ func set_auto_scroll(enabled: bool) -> void:
 	auto_scroll = enabled
 	if _log_display:
 		_log_display.scroll_following = enabled
+
+
+func _handle_terrain_command(action: String) -> void:
+	"""Handle terrain command execution"""
+	var terrain_renderer = get_node_or_null("/root/Main/TerrainRenderer")
+	if not terrain_renderer:
+		_log_router.log("TerrainRenderer not found", LogRouter.LogLevel.ERROR, "console")
+		return
+	
+	match action:
+		"status":
+			# Display terrain status
+			var status_msg = "=== Terrain Status ===\n"
+			status_msg += "Initialized: %s\n" % terrain_renderer.initialized
+			
+			if terrain_renderer.initialized:
+				# Get submarine reference
+				var submarine = get_node_or_null("/root/Main/SubmarineModel")
+				if submarine:
+					status_msg += "Submarine position: %s\n" % submarine.global_position
+				else:
+					status_msg += "Submarine: NOT FOUND\n"
+				
+				# Get chunk manager info
+				var chunk_manager = terrain_renderer.get_node_or_null("ChunkManager")
+				if chunk_manager:
+					status_msg += "Loaded chunks: %d\n" % chunk_manager.get_chunk_count()
+					status_msg += "Memory usage: %.1f MB\n" % chunk_manager.get_memory_usage_mb()
+				else:
+					status_msg += "ChunkManager: NOT FOUND\n"
+				
+				# Get streaming manager info
+				var streaming_manager = terrain_renderer.get_node_or_null("StreamingManager")
+				if streaming_manager:
+					status_msg += "Streaming: ACTIVE\n"
+					status_msg += "Load distance: %.1f m\n" % terrain_renderer.load_distance
+				else:
+					status_msg += "StreamingManager: NOT FOUND\n"
+				
+				# Check if submarine is set
+				if terrain_renderer._submarine:
+					status_msg += "Submarine reference: SET\n"
+				else:
+					status_msg += "Submarine reference: NOT SET (terrain won't load!)\n"
+			
+			_log_router.log(status_msg, LogRouter.LogLevel.INFO, "terrain")
+		
+		"reload":
+			# Force reload chunks
+			var chunk_manager = terrain_renderer.get_node_or_null("ChunkManager")
+			if chunk_manager:
+				chunk_manager.unload_all_chunks()
+				_log_router.log("All terrain chunks unloaded - will reload on next update", LogRouter.LogLevel.INFO, "terrain")
+			else:
+				_log_router.log("ChunkManager not found", LogRouter.LogLevel.ERROR, "terrain")

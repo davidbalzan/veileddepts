@@ -74,9 +74,13 @@ func _process(delta: float) -> void:
 
 
 ## Update passive sonar detections (bearing only)
+## Validates: Requirement 9.4 (sonar range relative to sea level)
 func _update_passive_sonar() -> void:
 	var submarine_pos = simulation_state.submarine_position
-	var submarine_depth = simulation_state.submarine_depth
+	
+	# Get current sea level from SeaLevelManager (Requirement 9.4)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var submarine_depth = sea_level_meters - submarine_pos.y  # Depth relative to current sea level
 
 	for contact in simulation_state.contacts:
 		# Skip if contact is not a submarine or surface ship
@@ -88,7 +92,7 @@ func _update_passive_sonar() -> void:
 
 		# Apply thermal layer effects
 		var effective_range = _apply_thermal_layer_effect(
-			passive_sonar_range, submarine_depth, contact.position.y
+			passive_sonar_range, submarine_depth, sea_level_meters - contact.position.y
 		)
 
 		# Check if within detection range
@@ -104,9 +108,13 @@ func _update_passive_sonar() -> void:
 
 
 ## Update active sonar detections (bearing + range)
+## Validates: Requirement 9.4 (sonar range relative to sea level)
 func _update_active_sonar() -> void:
 	var submarine_pos = simulation_state.submarine_position
-	var submarine_depth = simulation_state.submarine_depth
+	
+	# Get current sea level from SeaLevelManager (Requirement 9.4)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var submarine_depth = sea_level_meters - submarine_pos.y  # Depth relative to current sea level
 
 	for contact in simulation_state.contacts:
 		# Skip aircraft (active sonar doesn't detect aircraft)
@@ -118,7 +126,7 @@ func _update_active_sonar() -> void:
 
 		# Apply thermal layer effects
 		var effective_range = _apply_thermal_layer_effect(
-			active_sonar_range, submarine_depth, contact.position.y
+			active_sonar_range, submarine_depth, sea_level_meters - contact.position.y
 		)
 
 		# Check if within detection range
@@ -135,9 +143,13 @@ func _update_active_sonar() -> void:
 
 
 ## Update radar detections (bearing + range, surface only)
+## Validates: Requirement 9.2 (radar at periscope depth relative to sea level)
 func _update_radar() -> void:
 	var submarine_pos = simulation_state.submarine_position
-	var submarine_depth = simulation_state.submarine_depth
+	
+	# Get current sea level from SeaLevelManager (Requirement 9.2)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var submarine_depth = sea_level_meters - submarine_pos.y  # Depth relative to current sea level
 
 	# Radar only works when submarine is at periscope depth or shallower
 	if submarine_depth > 10.0:
@@ -266,17 +278,21 @@ func get_detected_contacts() -> Array[Contact]:
 
 
 ## Check if a contact is within detection range of any sensor
+## Validates: Requirement 9.4 (sonar range relative to sea level)
 func is_contact_in_range(contact: Contact) -> bool:
 	if not simulation_state:
 		return false
 
 	var submarine_pos = simulation_state.submarine_position
-	var submarine_depth = simulation_state.submarine_depth
+	
+	# Get current sea level from SeaLevelManager (Requirement 9.4)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var submarine_depth = sea_level_meters - submarine_pos.y  # Depth relative to current sea level
 	var distance = submarine_pos.distance_to(contact.position)
 
 	# Check passive sonar range
 	var passive_range = _apply_thermal_layer_effect(
-		passive_sonar_range, submarine_depth, contact.position.y
+		passive_sonar_range, submarine_depth, sea_level_meters - contact.position.y
 	)
 	if distance <= passive_range and contact.type != Contact.ContactType.AIRCRAFT:
 		return true
@@ -284,7 +300,7 @@ func is_contact_in_range(contact: Contact) -> bool:
 	# Check active sonar range
 	if active_sonar_enabled:
 		var active_range = _apply_thermal_layer_effect(
-			active_sonar_range, submarine_depth, contact.position.y
+			active_sonar_range, submarine_depth, sea_level_meters - contact.position.y
 		)
 		if distance <= active_range and contact.type != Contact.ContactType.AIRCRAFT:
 			return true

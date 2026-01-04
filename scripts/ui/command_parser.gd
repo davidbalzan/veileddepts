@@ -81,6 +81,12 @@ const COMMANDS = {
 		"description": "Display command history",
 		"min_args": 0,
 		"max_args": 0
+	},
+	"terrain": {
+		"usage": "/terrain [status|reload]",
+		"description": "Show terrain status or force reload chunks",
+		"min_args": 0,
+		"max_args": 1
 	}
 }
 
@@ -208,6 +214,8 @@ func execute(parsed_command: ParsedCommand) -> CommandResult:
 			return _execute_load(args)
 		"history":
 			return _execute_history(args)
+		"terrain":
+			return _execute_terrain(args)
 		_:
 			return CommandResult.new(false, "Command not implemented: /" + command)
 
@@ -418,3 +426,17 @@ func _execute_load(args: Array[String]) -> CommandResult:
 func _execute_history(args: Array[String]) -> CommandResult:
 	# Return success - DevConsole will display the history
 	return CommandResult.new(true, "history")
+
+
+func _execute_terrain(args: Array[String]) -> CommandResult:
+	var action = "status" if args.is_empty() else args[0].to_lower()
+	
+	match action:
+		"status", "reload":
+			return CommandResult.new(true, "terrain " + action, action)
+		_:
+			return CommandResult.new(
+				false,
+				"Invalid terrain action: " + action + "\nValid actions: status, reload"
+			)
+

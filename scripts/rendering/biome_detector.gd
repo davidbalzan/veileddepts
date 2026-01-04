@@ -3,6 +3,7 @@
 ## Analyzes terrain heightmaps to detect and classify biomes based on
 ## elevation and slope. Applies smoothing to prevent biome noise.
 ## Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+## Dynamic Sea Level: Requirements 3.1, 3.2, 3.3, 3.4
 
 class_name BiomeDetector extends Node
 
@@ -10,7 +11,7 @@ class_name BiomeDetector extends Node
 @export var beach_slope_threshold: float = 0.3  # radians (~17 degrees)
 @export var cliff_slope_threshold: float = 0.6  # radians (~34 degrees)
 @export var shallow_water_depth: float = 50.0  # meters (changed from 10.0 to match design)
-@export var sea_level: float = 0.0  # meters
+@export var sea_level: float = 0.0  # meters (deprecated - use SeaLevelManager instead)
 
 ## Elevation thresholds for above-water biomes
 @export var grass_max_elevation: float = 1000.0  # meters
@@ -24,29 +25,39 @@ class_name BiomeDetector extends Node
 ## Detect biomes in a heightmap and return a biome map
 ##
 ## @param heightmap: The terrain heightmap to analyze
-## @param sea_level_override: Optional sea level override (uses @export sea_level if not provided)
+## @param sea_level_override: Optional sea level override (uses SeaLevelManager if not provided)
 ## @return: Image containing biome type IDs (one byte per pixel)
 func detect_biomes(heightmap: Image, sea_level_override: float = NAN) -> Image:
 	if not heightmap:
 		push_error("BiomeDetector: heightmap is null")
 		return null
 
-	var effective_sea_level: float = (
-		sea_level_override if not is_nan(sea_level_override) else sea_level
-	)
+	# Determine effective sea level
+	var effective_sea_level_meters: float
+	if not is_nan(sea_level_override):
+		# Use override if provided (backward compatibility)
+		effective_sea_level_meters = sea_level_override
+	else:
+		# Query SeaLevelManager for current sea level
+		if SeaLevelManager:
+			effective_sea_level_meters = SeaLevelManager.get_sea_level_meters()
+		else:
+			# Fallback to exported sea_level if manager not available
+			push_warning("BiomeDetector: SeaLevelManager not available, using exported sea_level")
+			effective_sea_level_meters = sea_level
 
-	var width: int = heightmap.get_width()
-	var height: int = heightmap.get_height()
+	var _width: int = heightmap.get_width()
+	var _height: int = heightmap.get_height()
 
 	# Create biome map (FORMAT_R8 for single byte per pixel)
-	var biome_map: Image = Image.create(width, height, false, Image.FORMAT_R8)
+	var biome_map: Image = Image.create(_width, _height, false, Image.FORMAT_R8)
 
 	# First pass: classify each pixel
-	for y in range(height):
-		for x in range(width):
+	for y in range(_height):
+		for x in range(_width):
 			var elevation: float = _get_height_at(heightmap, x, y)
 			var slope: float = _calculate_slope(heightmap, x, y)
-			var biome: int = get_biome(elevation, slope, effective_sea_level)
+			var biome: int = get_biome(elevation, slope, effective_sea_level_meters)
 
 			# Store biome ID as byte value
 			biome_map.set_pixel(x, y, Color(biome / 255.0, 0, 0, 1))
@@ -62,13 +73,25 @@ func detect_biomes(heightmap: Image, sea_level_override: float = NAN) -> Image:
 ##
 ## @param elevation: Height in meters (negative = underwater)
 ## @param slope: Slope in radians
-## @param sea_level_value: Sea level in meters
+## @param sea_level_value: Sea level in meters (optional, uses SeaLevelManager if NAN)
 ## @return: BiomeType.Type enum value
-func get_biome(elevation: float, slope: float, sea_level_value: float) -> int:
-	var depth: float = sea_level_value - elevation
+func get_biome(elevation: float, slope: float, sea_level_value: float = NAN) -> int:
+	# Determine effective sea level
+	var effective_sea_level: float
+	if not is_nan(sea_level_value):
+		effective_sea_level = sea_level_value
+	else:
+		# Query SeaLevelManager for current sea level
+		if SeaLevelManager:
+			effective_sea_level = SeaLevelManager.get_sea_level_meters()
+		else:
+			# Fallback to exported sea_level if manager not available
+			effective_sea_level = sea_level
+	
+	var depth: float = effective_sea_level - elevation
 
 	# Underwater biomes
-	if elevation < sea_level_value:
+	if elevation < effective_sea_level:
 		if depth > shallow_water_depth:
 			return BiomeType.Type.DEEP_WATER
 		else:
@@ -76,7 +99,7 @@ func get_biome(elevation: float, slope: float, sea_level_value: float) -> int:
 
 	# Coastal biomes (near sea level)
 	var coastal_threshold: float = 10.0  # meters above sea level
-	if elevation < sea_level_value + coastal_threshold:
+	if elevation < effective_sea_level + coastal_threshold:
 		if slope < beach_slope_threshold:
 			return BiomeType.Type.BEACH
 		elif slope > cliff_slope_threshold:
@@ -174,11 +197,11 @@ func _get_height_at(heightmap: Image, x: int, y: int) -> float:
 ## Calculate slope at a pixel using central differences
 ## Returns slope in radians
 func _calculate_slope(heightmap: Image, x: int, y: int) -> float:
-	var width: int = heightmap.get_width()
-	var height: int = heightmap.get_height()
+	var _width: int = heightmap.get_width()
+	var _height: int = heightmap.get_height()
 
 	# Get neighboring heights
-	var h_center: float = _get_height_at(heightmap, x, y)
+	var _h_center: float = _get_height_at(heightmap, x, y)
 	var h_left: float = _get_height_at(heightmap, x - 1, y)
 	var h_right: float = _get_height_at(heightmap, x + 1, y)
 	var h_up: float = _get_height_at(heightmap, x, y - 1)

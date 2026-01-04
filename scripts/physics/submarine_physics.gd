@@ -247,25 +247,28 @@ func get_available_classes() -> Array:
 
 
 ## Apply buoyancy force based on ocean wave heights and submarine displacement
-## Validates: Requirements 11.1, 11.5
+## Validates: Requirements 11.1, 11.5, 9.5 (dynamic sea level)
 func apply_buoyancy(delta: float) -> void:
 	if not submarine_body:
 		return
 
 	var sub_pos = submarine_body.global_position
-	var current_depth = -sub_pos.y  # Depth is positive going down
+	
+	# Get current sea level from SeaLevelManager (Requirement 9.5)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var current_depth = sea_level_meters - sub_pos.y  # Depth is positive going down from sea level
 
 	# Calculate buoyancy reference point (offset below submarine center)
 	# This makes the submarine sit lower in the water
 	var buoyancy_sample_pos = sub_pos - Vector3(0, buoyancy_point_offset, 0)
 
 	# Get wave height at buoyancy reference point
-	var wave_height: float = 0.0
+	var wave_height: float = sea_level_meters  # Default to current sea level
 	if ocean_renderer and ocean_renderer.initialized:
 		# Use buoyancy sample position for wave height
 		wave_height = ocean_renderer.get_wave_height_3d(buoyancy_sample_pos)
 
-	# Calculate water level at submarine position (wave height is relative to y=0)
+	# Calculate water level at submarine position (wave height is relative to current sea level)
 	var water_level = wave_height
 
 	# Calculate how deep the buoyancy point is below the water surface
@@ -646,12 +649,14 @@ func _apply_steering_torque(target_heading: float, current_speed: float, _delta:
 
 
 ## Apply depth control forces to reach target depth
-## Validates: Requirements 11.1
+## Validates: Requirements 11.1, 9.1, 9.3 (dynamic sea level)
 func apply_depth_control(delta: float) -> void:
 	if not submarine_body or not simulation_state:
 		return
 
-	var current_depth = -submarine_body.global_position.y  # Depth is negative Y
+	# Get current sea level from SeaLevelManager (Requirement 9.1)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var current_depth = sea_level_meters - submarine_body.global_position.y  # Depth relative to current sea level
 	var target_depth = simulation_state.target_depth
 
 	# Calculate depth error
@@ -729,21 +734,22 @@ func apply_depth_control(delta: float) -> void:
 		var level_torque = -current_pitch * 40000.0
 		submarine_body.apply_torque(Vector3(level_torque, 0, 0))
 
-	# Clamp depth to operational limits
+	# Clamp depth to operational limits (Requirement 9.3 - surface breach prevention)
 	# Allow surfacing when target depth is shallow (< 1m)
 	var surface_limit = 2.0  # Default: stay 2m below surface
 	if simulation_state.target_depth < 1.0:
-		# When trying to surface, allow reaching actual surface (Y = 0)
+		# When trying to surface, allow reaching actual surface (Y = sea_level)
 		surface_limit = 0.0
 
 	if current_depth < -surface_limit:  # Above allowed surface limit
-		# Force submarine to stay at or below allowed surface
-		submarine_body.global_position.y = min(submarine_body.global_position.y, surface_limit)
+		# Force submarine to stay at or below allowed surface (relative to current sea level)
+		var max_y_position = sea_level_meters + surface_limit
+		submarine_body.global_position.y = min(submarine_body.global_position.y, max_y_position)
 		if submarine_body.linear_velocity.y > 0:  # Moving upward
 			submarine_body.linear_velocity.y *= 0.3  # Damping when hitting surface
 	elif current_depth > max_depth:
 		# Emergency surface if exceeding max depth
-		submarine_body.global_position.y = -max_depth
+		submarine_body.global_position.y = sea_level_meters - max_depth
 		if submarine_body.linear_velocity.y < 0:
 			submarine_body.linear_velocity.y = 0
 		push_warning("Submarine exceeded maximum depth!")
@@ -786,6 +792,7 @@ func update_physics(delta: float) -> void:
 
 
 ## Get current submarine state for synchronization
+## Validates: Requirement 9.1 (depth reading relative to sea level)
 func get_submarine_state() -> Dictionary:
 	if not submarine_body:
 		return {}
@@ -793,8 +800,9 @@ func get_submarine_state() -> Dictionary:
 	var pos = submarine_body.global_position
 	var vel = submarine_body.linear_velocity
 
-	# Calculate depth (negative Y position)
-	var depth = -pos.y
+	# Calculate depth relative to current sea level (Requirement 9.1)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	var depth = sea_level_meters - pos.y  # Depth is positive going down from sea level
 
 	# Calculate horizontal speed (exclude vertical component)
 	var horizontal_velocity = Vector2(vel.x, vel.z)

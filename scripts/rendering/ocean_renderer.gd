@@ -22,12 +22,18 @@ var initialized: bool = false
 @export var mesh_vertex_resolution: int = 128
 
 @export_group("Ocean Level")
-@export var sea_level: float = 0.0
+@export var sea_level_offset: float = 0.0  # Offset from manager's sea level
 
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
 		call_deferred("_setup_ocean")
+		# Connect to SeaLevelManager signal
+		if SeaLevelManager:
+			SeaLevelManager.sea_level_changed.connect(_on_sea_level_changed)
+			# Initialize with current sea level
+			var current_sea_level = SeaLevelManager.get_sea_level_meters()
+			global_position.y = current_sea_level + sea_level_offset
 
 
 func _setup_ocean() -> void:
@@ -79,8 +85,23 @@ func _setup_ocean() -> void:
 	quad_tree.ranges = ranges
 
 	add_child(quad_tree)
+	
+	# Update quad_tree position to match current sea level
+	if SeaLevelManager:
+		var current_sea_level = SeaLevelManager.get_sea_level_meters()
+		quad_tree.global_position.y = current_sea_level + sea_level_offset
+	
 	initialized = true
 	print("OceanRenderer: Initialized")
+
+
+func _on_sea_level_changed(_normalized: float, meters: float) -> void:
+	# Update ocean surface position
+	global_position.y = meters + sea_level_offset
+	
+	# Update quad_tree position if it exists
+	if quad_tree and is_instance_valid(quad_tree):
+		quad_tree.global_position.y = meters + sea_level_offset
 
 
 func _exit_tree() -> void:
@@ -97,18 +118,36 @@ func _process(delta: float) -> void:
 
 func get_wave_height_3d(world_pos: Vector3) -> float:
 	if not initialized or not ocean or not ocean.initialized:
-		return sea_level
+		# Return current sea level from manager if available
+		if SeaLevelManager:
+			return SeaLevelManager.get_sea_level_meters()
+		return 0.0
+	
 	# Use the current active camera, not the stored one (which may be stale after view switches)
 	var active_camera = get_viewport().get_camera_3d()
 	if not active_camera:
-		return sea_level
+		if SeaLevelManager:
+			return SeaLevelManager.get_sea_level_meters()
+		return 0.0
+	
 	# Use all 3 cascades to match the visual shader (CASCADE_COUNT = 3)
 	var displacement = ocean.get_wave_height(active_camera, world_pos, 3, 2)
-	return sea_level + displacement
+	
+	# Get current sea level from manager
+	var current_sea_level = 0.0
+	if SeaLevelManager:
+		current_sea_level = SeaLevelManager.get_sea_level_meters()
+	
+	return current_sea_level + displacement
 
 
 func is_position_underwater(world_pos: Vector3, buffer: float = 0.5) -> bool:
 	if not initialized:
+		# Use manager's sea level if available
+		var sea_level = 0.0
+		if SeaLevelManager:
+			sea_level = SeaLevelManager.get_sea_level_meters()
 		return world_pos.y < sea_level
+	
 	var wave_height = get_wave_height_3d(world_pos)
 	return world_pos.y < (wave_height - buffer)

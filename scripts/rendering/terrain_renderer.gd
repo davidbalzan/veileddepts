@@ -69,6 +69,12 @@ var _submarine: RigidBody3D = null
 # Initialization flag
 var initialized: bool = false
 
+# Incremental update state for sea level changes
+var _sea_level_update_queue: Array[Vector2i] = []  # Queue of chunks to update
+var _sea_level_update_in_progress: bool = false
+var _chunks_per_frame: int = 5  # Number of chunks to update per frame
+var _current_sea_level_meters: float = 0.0  # Cached sea level for incremental updates
+
 
 func _ready() -> void:
 	add_to_group("terrain_renderer")
@@ -226,6 +232,9 @@ func _process(_delta: float) -> void:
 
 	# Update streaming based on submarine position
 	_streaming_manager.update(_submarine.global_position)
+	
+	# Process incremental sea level updates
+	_process_sea_level_updates(_delta)
 
 	# Debug: Print chunk status every 120 frames (2 seconds at 60fps)
 	_debug_frame_counter += 1
@@ -237,16 +246,19 @@ func _process(_delta: float) -> void:
 
 
 ## Callback when sea level changes
-## Updates all loaded chunks with the new sea level value
+## Updates all loaded chunks with the new sea level value using incremental updates
 func _on_sea_level_changed(normalized: float, meters: float) -> void:
 	if not initialized or not _chunk_manager:
 		return
+	
+	# Store the new sea level
+	_current_sea_level_meters = meters
 	
 	# Log the sea level change
 	if _logger:
 		_logger.log_info(
 			"TerrainRenderer",
-			"Sea level changed, updating chunks",
+			"Sea level changed, queuing chunk updates",
 			{
 				"normalized": "%.3f" % normalized,
 				"meters": "%.1f" % meters,
@@ -254,34 +266,83 @@ func _on_sea_level_changed(normalized: float, meters: float) -> void:
 			}
 		)
 	
-	# Update all loaded chunks with new sea level
+	# Get all loaded chunks and queue them for incremental update
 	var loaded_chunks = _chunk_manager.get_loaded_chunks()
-	var updated_count = 0
-	
-	for chunk_coord in loaded_chunks:
-		var chunk = _chunk_manager.get_chunk(chunk_coord)
-		if chunk and chunk.material:
-			chunk.material.set_shader_parameter("sea_level", meters)
-			updated_count += 1
-	
-	# Log completion
-	if _logger:
-		_logger.log_info(
-			"TerrainRenderer",
-			"Chunk shader parameters updated",
-			{
-				"updated_chunks": str(updated_count),
-				"total_chunks": str(loaded_chunks.size())
-			}
-		)
+	_sea_level_update_queue.clear()
+	_sea_level_update_queue.append_array(loaded_chunks)
+	_sea_level_update_in_progress = true
 	
 	if LogRouter:
 		LogRouter.log(
-			"TerrainRenderer: Updated %d chunks with new sea level: %.1fm" % [updated_count, meters],
+			"TerrainRenderer: Queued %d chunks for sea level update to %.1fm" % [_sea_level_update_queue.size(), meters],
 			LogRouter.LogLevel.INFO,
 			"terrain"
 		)
+	
+	# Report progress to SeaLevelManager
+	if SeaLevelManager:
+		SeaLevelManager.update_progress.emit(0.0, "TerrainRenderer: Starting chunk updates")
 
+
+## Process incremental chunk updates (called from _process)
+func _process_sea_level_updates(_delta: float) -> void:
+	if not _sea_level_update_in_progress or _sea_level_update_queue.is_empty():
+		return
+	
+	var start_time = Time.get_ticks_usec()
+	var updated_count = 0
+	var total_chunks = _chunk_manager.get_chunk_count()
+	var remaining_before = _sea_level_update_queue.size()
+	
+	# Update a batch of chunks this frame
+	for i in range(_chunks_per_frame):
+		if _sea_level_update_queue.is_empty():
+			break
+		
+		var chunk_coord = _sea_level_update_queue.pop_front()
+		var chunk = _chunk_manager.get_chunk(chunk_coord)
+		
+		if chunk and chunk.material:
+			chunk.material.set_shader_parameter("sea_level", _current_sea_level_meters)
+			updated_count += 1
+	
+	# Calculate progress
+	var remaining_after = _sea_level_update_queue.size()
+	var progress = 1.0 - (float(remaining_after) / float(remaining_before + updated_count))
+	
+	# Report progress
+	if SeaLevelManager:
+		SeaLevelManager.update_progress.emit(
+			progress,
+			"TerrainRenderer: Updating chunks (%d/%d)" % [remaining_before - remaining_after, remaining_before]
+		)
+	
+	# Check if we're done
+	if _sea_level_update_queue.is_empty():
+		_sea_level_update_in_progress = false
+		
+		var duration_ms = (Time.get_ticks_usec() - start_time) / 1000.0
+		
+		if _logger:
+			_logger.log_info(
+				"TerrainRenderer",
+				"Chunk shader parameters updated",
+				{
+					"updated_chunks": str(total_chunks),
+					"duration_ms": "%.1f" % duration_ms
+				}
+			)
+		
+		if LogRouter:
+			LogRouter.log(
+				"TerrainRenderer: Completed sea level update for %d chunks in %.1fms" % [total_chunks, duration_ms],
+				LogRouter.LogLevel.INFO,
+				"terrain"
+			)
+		
+		# Report completion
+		if SeaLevelManager:
+			SeaLevelManager.update_progress.emit(1.0, "TerrainRenderer: Update complete")
 
 # ============================================================================
 # Backward Compatibility Interface

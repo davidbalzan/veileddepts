@@ -12,11 +12,12 @@ var _scaled_map_texture: ImageTexture = null  # Downscaled version for display
 var icon_overlay: Control = null
 var map_background: TextureRect = null
 
-# Sea level control
-var sea_level_threshold: float = 0.554  # Default sea level (0-1 range)
+# Sea level control (removed local sea_level_threshold, now using SeaLevelManager)
 var _sea_level_slider: HSlider = null
 var _debug_panel: PanelContainer = null
 var _debug_visible: bool = false
+var _progress_bar: ProgressBar = null
+var _progress_label: Label = null
 
 # State for "resample on zoom" detail texture
 var _detail_texture: ImageTexture = null
@@ -67,6 +68,10 @@ func _ready() -> void:
 	_create_overlay_node()
 	_create_debug_panel()
 	
+	# Connect to SeaLevelManager progress signal
+	if SeaLevelManager:
+		SeaLevelManager.update_progress.connect(_on_sea_level_update_progress)
+	
 	if global_map_image:
 		_create_optimized_map()
 		print("WholeMapView: Initialized with Global Map (CPU-Colorized)")
@@ -85,6 +90,9 @@ func _create_optimized_map() -> void:
 	var target_height = int(source_h / scale_w)
 	
 	var color_image = Image.create(target_width, target_height, false, Image.FORMAT_RGBA8)
+	
+	# Get current sea level from manager
+	var sea_level_threshold = SeaLevelManager.get_sea_level_normalized()
 	
 	# Sample directly from large image to avoid huge duplicates
 	for y in range(target_height):
@@ -214,7 +222,7 @@ func _create_debug_panel() -> void:
 	
 	# Sea Level Control Section
 	var sea_level_label = Label.new()
-	sea_level_label.text = "Sea Level Threshold"
+	sea_level_label.text = "Sea Level Threshold (Visualization Only)"
 	sea_level_label.add_theme_font_size_override("font_size", 14)
 	sea_level_label.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(sea_level_label)
@@ -222,7 +230,9 @@ func _create_debug_panel() -> void:
 	# Sea level value display
 	var sea_level_value = Label.new()
 	sea_level_value.name = "SeaLevelValue"
-	sea_level_value.text = "%.3f (Default: 0.554)" % sea_level_threshold
+	var current_normalized = SeaLevelManager.get_sea_level_normalized()
+	var current_meters = SeaLevelManager.get_sea_level_meters()
+	sea_level_value.text = "%.3f (%.0fm elevation, Default: 0.554)" % [current_normalized, current_meters]
 	sea_level_value.add_theme_font_size_override("font_size", 12)
 	sea_level_value.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
 	vbox.add_child(sea_level_value)
@@ -233,10 +243,36 @@ func _create_debug_panel() -> void:
 	_sea_level_slider.min_value = 0.0
 	_sea_level_slider.max_value = 1.0
 	_sea_level_slider.step = 0.001
-	_sea_level_slider.value = sea_level_threshold
+	_sea_level_slider.value = current_normalized
 	_sea_level_slider.custom_minimum_size = Vector2(280, 20)
 	_sea_level_slider.value_changed.connect(_on_sea_level_changed)
 	vbox.add_child(_sea_level_slider)
+	
+	# Reset to Default button
+	var reset_button = Button.new()
+	reset_button.name = "ResetSeaLevelButton"
+	reset_button.text = "Reset to Default (0m)"
+	reset_button.custom_minimum_size = Vector2(280, 30)
+	reset_button.pressed.connect(_on_reset_sea_level)
+	vbox.add_child(reset_button)
+	
+	# Progress indicator (initially hidden)
+	_progress_label = Label.new()
+	_progress_label.name = "ProgressLabel"
+	_progress_label.text = ""
+	_progress_label.add_theme_font_size_override("font_size", 11)
+	_progress_label.add_theme_color_override("font_color", Color(1, 1, 0, 1))
+	_progress_label.visible = false
+	vbox.add_child(_progress_label)
+	
+	_progress_bar = ProgressBar.new()
+	_progress_bar.name = "ProgressBar"
+	_progress_bar.custom_minimum_size = Vector2(280, 20)
+	_progress_bar.min_value = 0.0
+	_progress_bar.max_value = 1.0
+	_progress_bar.value = 0.0
+	_progress_bar.visible = false
+	vbox.add_child(_progress_bar)
 	
 	# Separator
 	var separator2 = HSeparator.new()
@@ -445,7 +481,9 @@ func _generate_detail_texture() -> void:
 	var source_h = global_map_image.get_height()
 	
 	var detail_image = Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
-	var sea_level_threshold = 0.554
+	
+	# Get current sea level from manager
+	var sea_level_threshold = SeaLevelManager.get_sea_level_normalized()
 	
 	# Extract and colorize
 	for y in range(resolution):
@@ -629,12 +667,27 @@ func _update_debug_panel_info() -> void:
 	
 	var map_info = _debug_panel.find_child("MapInfo", true, false)
 	if map_info and global_map_image:
-		map_info.text = "Size: %dx%d pixels\nZoom: %.2fx\nTiles Cached: %d/%d" % [
+		var perf_stats = ""
+		
+		# Get performance stats from SeaLevelManager
+		if SeaLevelManager:
+			var stats = SeaLevelManager.get_performance_stats()
+			perf_stats = "\nMemory: %.1fMB (Peak: %.1fMB)" % [
+				stats.current_memory_mb,
+				stats.peak_memory_mb
+			]
+			if stats.update_in_progress:
+				perf_stats += "\nUpdate: IN PROGRESS"
+			elif stats.last_update_duration_ms > 0:
+				perf_stats += "\nLast Update: %.1fms" % stats.last_update_duration_ms
+		
+		map_info.text = "Size: %dx%d pixels\nZoom: %.2fx\nTiles Cached: %d/%d%s" % [
 			global_map_image.get_width(),
 			global_map_image.get_height(),
 			map_zoom,
 			tile_cache.size(),
-			max_cached_tiles
+			max_cached_tiles,
+			perf_stats
 		]
 
 
@@ -756,19 +809,96 @@ func _on_toggle_terrain_panel() -> void:
 		DebugPanelManager.toggle_panel("terrain")
 
 
-func _on_sea_level_changed(value: float) -> void:
-	"""Called when sea level slider changes"""
-	sea_level_threshold = value
+## Override parent to match signature but handle slider input
+## This is called both from:
+## 1. The UI slider (1 param) - we update SeaLevelManager
+## 2. SeaLevelManager signal (2 params) - we regenerate the map
+func _on_sea_level_changed(normalized: float, meters: float = NAN) -> void:
+	# If meters is NAN, this came from the slider, so update the manager
+	if is_nan(meters):
+		SeaLevelManager.set_sea_level(normalized)
+		# The manager will emit its signal, which will call this method again with both params
+		return
 	
-	# Update the value label
+	# If we get here, this came from SeaLevelManager's signal
+	# Update UI display to show both normalized and metric values
 	if _debug_panel:
 		var value_label = _debug_panel.find_child("SeaLevelValue", true, false)
 		if value_label:
-			value_label.text = "%.3f (Default: 0.554)" % value
+			value_label.text = "%.3f (%.0fm elevation, Default: 0.554)" % [normalized, meters]
 	
 	# Regenerate the map with new sea level
 	if global_map_image:
 		_create_optimized_map()
-		_generate_detail_texture()
+		
+		# Update the map_background texture if it exists
+		if map_background:
+			map_background.texture = _scaled_map_texture
+		
+		# Force redraw
+		if map_canvas:
+			map_canvas.queue_redraw()
+		
+		# Regenerate detail texture if zoomed in
+		if map_zoom > 1.5:
+			_generate_detail_texture()
 	
-	print("WholeMapView: Sea level threshold changed to %.3f" % value)
+	print("WholeMapView: Sea level threshold changed to %.3f (%.0fm elevation)" % [normalized, meters])
+
+
+func _on_reset_sea_level() -> void:
+	"""Called when Reset to Default button is pressed"""
+	SeaLevelManager.reset_to_default()
+	
+	# Update slider to match
+	if _sea_level_slider:
+		_sea_level_slider.value = SeaLevelManager.get_sea_level_normalized()
+	
+	# Update UI display
+	var elevation_meters = SeaLevelManager.get_sea_level_meters()
+	if _debug_panel:
+		var value_label = _debug_panel.find_child("SeaLevelValue", true, false)
+		if value_label:
+			value_label.text = "%.3f (%.0fm elevation, Default: 0.554)" % [SeaLevelManager.get_sea_level_normalized(), elevation_meters]
+	
+	# Regenerate the map with default sea level
+	if global_map_image:
+		_create_optimized_map()
+		
+		# Update the map_background texture if it exists
+		if map_background:
+			map_background.texture = _scaled_map_texture
+		
+		# Force redraw
+		if map_canvas:
+			map_canvas.queue_redraw()
+		
+		# Regenerate detail texture if zoomed in
+		if map_zoom > 1.5:
+			_generate_detail_texture()
+	
+	print("WholeMapView: Sea level reset to default (0.554 / 0m elevation)")
+
+
+## Handle progress updates from SeaLevelManager
+func _on_sea_level_update_progress(progress: float, operation: String) -> void:
+	"""Update progress indicator during sea level changes"""
+	if not _progress_bar or not _progress_label:
+		return
+	
+	# Show progress indicator when update starts
+	if progress <= 0.0:
+		_progress_bar.visible = true
+		_progress_label.visible = true
+	
+	# Update progress
+	_progress_bar.value = progress
+	_progress_label.text = operation
+	
+	# Hide progress indicator when complete
+	if progress >= 1.0:
+		# Keep visible for a moment to show completion
+		await get_tree().create_timer(0.5).timeout
+		if _progress_bar and _progress_label:
+			_progress_bar.visible = false
+			_progress_label.visible = false

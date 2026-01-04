@@ -19,6 +19,11 @@ class_name ChunkRenderer extends Node
 @export var chunk_size: float = 512.0
 
 ## Height scaling (from normalized 0-1 to real-world elevation)
+## These can be overridden for specific mission areas
+@export var min_elevation: float = -200.0  # Minimum terrain height (meters)
+@export var max_elevation: float = 100.0   # Maximum terrain height (meters)
+
+# Full Earth range (for reference, not used by default)
 const MARIANA_TRENCH_DEPTH: float = -10994.0
 const MOUNT_EVEREST_HEIGHT: float = 8849.0
 
@@ -213,8 +218,8 @@ func _create_vertex_data(
 		hm_z = clamp(hm_z, 0, base_resolution - 1)
 
 	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
-	# Convert from normalized (0-1) to real world elevation
-	var height_value = lerp(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, height_normalized)
+	# Convert from normalized (0-1) to mission area elevation range
+	var height_value = lerp(min_elevation, max_elevation, height_normalized)
 
 	# Calculate world position
 	var local_x = (float(x) / (lod_resolution - 1)) * chunk_size
@@ -247,8 +252,8 @@ func _create_vertex_data_from_heightmap_coord(
 	base_resolution: int
 ) -> VertexData:
 	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
-	# Convert from normalized (0-1) to real world elevation
-	var height_value = lerp(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, height_normalized)
+	# Convert from normalized (0-1) to mission area elevation range
+	var height_value = lerp(min_elevation, max_elevation, height_normalized)
 
 	# Calculate local position within chunk
 	var local_x = (float(hm_x) / (base_resolution - 1)) * chunk_size
@@ -534,7 +539,13 @@ func create_chunk_material(biome_map: Image, bump_map: Image) -> ShaderMaterial:
 
 	# Set other shader parameters
 	material.set_shader_parameter("chunk_size", chunk_size)
-	material.set_shader_parameter("sea_level", 0.0)
+	
+	# Get current sea level from SeaLevelManager
+	var current_sea_level: float = 0.0
+	if SeaLevelManager:
+		current_sea_level = SeaLevelManager.get_sea_level_meters()
+	
+	material.set_shader_parameter("sea_level", current_sea_level)
 	material.set_shader_parameter("bump_strength", 1.0)
 	material.set_shader_parameter("underwater_visibility", 50.0)
 

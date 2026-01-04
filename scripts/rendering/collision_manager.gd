@@ -158,15 +158,23 @@ func get_height_at(world_pos: Vector2) -> float:
 ## Check if position is underwater with clearance above sea floor
 ##
 ## Verifies that a position is:
-## 1. Below sea level (y < 0)
+## 1. Below sea level (using current dynamic sea level from SeaLevelManager)
 ## 2. Has sufficient clearance above the terrain
 ##
 ## @param world_pos: World position (3D)
 ## @param clearance: Required clearance above terrain in meters
 ## @return: True if position is safe underwater
 func is_underwater_safe(world_pos: Vector3, clearance: float) -> bool:
+	# Get current sea level from manager
+	var sea_level: float = 0.0
+	var sea_level_manager = get_node_or_null("/root/SeaLevelManager")
+	if sea_level_manager:
+		sea_level = sea_level_manager.get_sea_level_meters()
+	else:
+		push_warning("CollisionManager: SeaLevelManager not available, using default sea level (0m)")
+	
 	# Check if below sea level
-	if world_pos.y >= 0.0:
+	if world_pos.y >= sea_level:
 		return false
 
 	# Get terrain height at this position
@@ -176,6 +184,88 @@ func is_underwater_safe(world_pos: Vector3, clearance: float) -> bool:
 	var height_above_terrain: float = world_pos.y - terrain_height
 
 	return height_above_terrain >= clearance
+
+
+## Find a safe spawn position underwater
+##
+## Searches for a position that is:
+## 1. Below current sea level
+## 2. Above terrain with sufficient clearance
+## 3. Within search radius of preferred position
+##
+## @param preferred_position: Preferred spawn location (will search nearby)
+## @param search_radius: How far to search for a valid position (meters)
+## @param clearance: Required clearance above terrain (meters)
+## @param depth_below_sea_level: Desired depth below sea level (meters, positive value)
+## @return: Safe spawn position, or preferred_position adjusted to safe depth if no valid position found
+func find_safe_spawn_position(
+	preferred_position: Vector3 = Vector3.ZERO,
+	search_radius: float = 500.0,
+	clearance: float = 50.0,
+	depth_below_sea_level: float = 50.0
+) -> Vector3:
+	# Get current sea level from manager
+	var sea_level: float = 0.0
+	var sea_level_manager = get_node_or_null("/root/SeaLevelManager")
+	if sea_level_manager:
+		sea_level = sea_level_manager.get_sea_level_meters()
+	else:
+		push_warning("CollisionManager: SeaLevelManager not available, using default sea level (0m)")
+	
+	# Calculate target depth (below sea level)
+	var target_depth: float = sea_level - depth_below_sea_level
+	
+	# Try the preferred position first
+	var terrain_height: float = get_height_at(Vector2(preferred_position.x, preferred_position.z))
+	
+	# Check if preferred position is valid
+	if terrain_height < sea_level:  # Underwater terrain
+		# Calculate safe depth between terrain and sea level
+		var min_safe_y: float = terrain_height + clearance
+		var max_safe_y: float = sea_level
+		
+		if min_safe_y < max_safe_y:
+			# Clamp target depth to safe range
+			var safe_y: float = clamp(target_depth, min_safe_y, max_safe_y - 1.0)
+			return Vector3(preferred_position.x, safe_y, preferred_position.z)
+	
+	# Search in a spiral pattern for a valid underwater position
+	var search_steps: int = 16
+	var angle_step: float = TAU / 8.0  # 8 directions
+	
+	for ring in range(1, search_steps):
+		var radius: float = (float(ring) / float(search_steps)) * search_radius
+		
+		for angle_idx in range(8):
+			var angle: float = float(angle_idx) * angle_step
+			var test_pos := Vector2(
+				preferred_position.x + cos(angle) * radius,
+				preferred_position.z + sin(angle) * radius
+			)
+			
+			var test_height: float = get_height_at(test_pos)
+			
+			# Check if this position is underwater
+			if test_height < sea_level:
+				# Calculate safe depth
+				var min_safe_y: float = test_height + clearance
+				var max_safe_y: float = sea_level
+				
+				if min_safe_y < max_safe_y:
+					var safe_y: float = clamp(target_depth, min_safe_y, max_safe_y - 1.0)
+					print(
+						"CollisionManager: Found safe spawn position at ",
+						Vector3(test_pos.x, safe_y, test_pos.y),
+						" (sea level: %.1fm, terrain: %.1fm)" % [sea_level, test_height]
+					)
+					return Vector3(test_pos.x, safe_y, test_pos.y)
+	
+	# No valid position found, return a position at target depth
+	# This might not be safe, but it's the best we can do
+	push_warning(
+		"CollisionManager: Could not find safe spawn position within search radius, using target depth (%.1fm below sea level)" % depth_below_sea_level
+	)
+	return Vector3(preferred_position.x, target_depth, preferred_position.z)
 
 
 ## Raycast against terrain
