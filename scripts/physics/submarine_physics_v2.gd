@@ -23,6 +23,7 @@ var rudder_system: RudderSystem
 var dive_plane_system: DivePlaneSystem
 var ballast_system: BallastSystem
 var buoyancy_system: BuoyancySystem
+var hull_lift_system: HullLiftSystem
 var physics_validator: PhysicsValidator
 
 # Cached values for performance (Requirement 12.4, 15.2)
@@ -171,6 +172,9 @@ func _instantiate_components() -> void:
 	# Create buoyancy system
 	buoyancy_system = BuoyancySystem.new({"submarine_volume": 8000.0})
 
+	# Create hull lift system
+	hull_lift_system = HullLiftSystem.new()
+
 	# Create physics validator
 	physics_validator = PhysicsValidator.new()
 
@@ -265,6 +269,13 @@ func update_physics(delta: float) -> void:
 	)
 	if is_finite(dive_plane_torque):
 		submarine_body.apply_torque(Vector3(dive_plane_torque, 0, 0))
+
+	# Step 7b: Calculate and apply hull lift forces (from pitch angle + forward speed)
+	var hull_lift_force = hull_lift_system.calculate_hull_lift_with_damping(
+		current_pitch, velocity, submarine_body.global_transform.basis
+	)
+	if physics_validator.validate_vector(hull_lift_force, "hull_lift_force"):
+		submarine_body.apply_central_force(hull_lift_force)
 
 	# Step 8: Calculate and apply ballast forces - Requirement 12.1
 	var ballast_force = ballast_system.calculate_ballast_force(
