@@ -51,6 +51,11 @@ var target_arrow: Node3D = null
 ## Seabed depth HUD
 var seabed_hud: SeabedDepthHUD = null
 
+## Underwater environment
+var underwater_environment: Environment = null
+var surface_environment: Environment = null
+var ocean_renderer: Node = null
+
 
 func _ready() -> void:
 	# Find camera in scene tree
@@ -70,8 +75,16 @@ func _ready() -> void:
 	if not fog_of_war:
 		push_warning("ExternalView: FogOfWarSystem not found, all contacts will be visible")
 
+	# Find ocean renderer for underwater detection
+	ocean_renderer = main_node.get_node_or_null("OceanRenderer")
+	if not ocean_renderer:
+		push_warning("ExternalView: OceanRenderer not found, underwater detection will use fixed depth")
+
 	# Initialize camera position
 	update_camera_position()
+
+	# Setup underwater environment
+	_setup_underwater_environment()
 
 	# Create debug arrow nodes
 	_create_debug_arrows()
@@ -227,6 +240,9 @@ func move_free_camera(direction: Vector3, delta: float) -> void:
 func _process(delta: float) -> void:
 	# Update camera position to track submarine (or maintain free camera position)
 	update_camera_position()
+
+	# Update underwater environment based on camera position
+	_update_underwater_environment()
 
 	# Update debug vectors if enabled
 	if show_debug_vectors:
@@ -467,3 +483,67 @@ func _position_arrow(arrow: Node3D, start_pos: Vector3, direction: Vector3, leng
 	var shaft = arrow.get_node_or_null("Shaft")
 	if shaft:
 		shaft.height = length
+
+
+## Setup underwater environment for when camera is submerged
+func _setup_underwater_environment() -> void:
+	# Store the current environment as surface environment
+	if camera:
+		surface_environment = camera.environment
+	
+	# Create underwater environment
+	underwater_environment = Environment.new()
+
+	# Configure underwater fog - blue-green murky water
+	underwater_environment.fog_enabled = true
+	underwater_environment.fog_light_color = Color(0.1, 0.3, 0.4)  # Blue-green underwater color
+	underwater_environment.fog_density = 0.03  # Slightly less dense than periscope for better visibility
+	underwater_environment.fog_aerial_perspective = 0.5
+
+	# Configure ambient lighting for underwater
+	underwater_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	underwater_environment.ambient_light_color = Color(0.2, 0.4, 0.5)  # Dim blue-green ambient
+	underwater_environment.ambient_light_energy = 0.4  # Slightly brighter than periscope for gameplay
+
+	# Adjust tonemap for darker underwater environment
+	underwater_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	underwater_environment.tonemap_exposure = 0.8  # Slightly brighter than periscope
+
+	# Copy sky settings from surface environment if available
+	if surface_environment:
+		underwater_environment.background_mode = surface_environment.background_mode
+		underwater_environment.sky = surface_environment.sky
+
+	print("ExternalView: Underwater environment configured")
+
+
+## Check if camera is underwater
+func _is_camera_underwater() -> bool:
+	if not camera:
+		return false
+	
+	var camera_y = camera.global_position.y
+	var sea_level = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	
+	# Get wave height at camera position if ocean renderer available
+	if ocean_renderer and ocean_renderer.has_method("get_wave_height_at_position"):
+		var camera_xz = Vector2(camera.global_position.x, camera.global_position.z)
+		var wave_height = ocean_renderer.get_wave_height_at_position(camera_xz)
+		sea_level += wave_height
+	
+	return camera_y < sea_level
+
+
+## Update camera environment based on whether it's underwater
+func _update_underwater_environment() -> void:
+	if not camera:
+		return
+	
+	var is_underwater = _is_camera_underwater()
+	
+	if is_underwater:
+		if camera.environment != underwater_environment:
+			camera.environment = underwater_environment
+	else:
+		if camera.environment != surface_environment:
+			camera.environment = surface_environment

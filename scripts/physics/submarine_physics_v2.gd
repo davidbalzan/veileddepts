@@ -33,7 +33,7 @@ var _cache_frame: int = -1
 var mass: float = 8000.0  # tons
 var max_speed: float = 10.3  # m/s (20 knots)
 var max_depth: float = 400.0  # meters
-var map_boundary: float = 974.0  # ±974m from origin (50m buffer from 1024m terrain edge)
+# Note: map_boundary removed - dynamic terrain streaming allows unlimited exploration
 
 # Debug mode (Requirement 14.1)
 var debug_mode: bool = false:
@@ -282,8 +282,7 @@ func update_physics(delta: float) -> void:
 	# Step 11: Clamp velocity - Requirement 10.1
 	physics_validator.clamp_velocity(submarine_body, max_speed)
 
-	# Step 12: Enforce boundaries - Requirement 11.1
-	physics_validator.enforce_boundaries(submarine_body, map_boundary)
+	# Note: Map boundaries removed - dynamic terrain streaming allows unlimited exploration
 
 
 ## Get current submarine state for synchronization

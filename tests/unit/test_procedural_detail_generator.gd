@@ -14,10 +14,11 @@ func test_initialization():
 	"""Test that generator initializes correctly"""
 	assert_not_null(generator, "Generator should be created")
 	assert_gt(generator.detail_scale, 0.0, "Detail scale should be positive")
-	assert_eq(generator.detail_scale, 30.0, "Detail scale should be 30.0 meters")
-	assert_eq(generator.detail_contribution, 0.5, "Detail contribution should be 50%")
+	# Values are normalized (0-1 range), converted to meters by ChunkRenderer
+	assert_almost_eq(generator.detail_scale, 0.05, 0.001, "Detail scale should be 0.05 (normalized)")
+	assert_almost_eq(generator.detail_contribution, 0.3, 0.01, "Detail contribution should be 30%")
 	assert_eq(generator.flat_terrain_threshold, 0.05, "Flat terrain threshold should be 0.05")
-	assert_eq(generator.flat_terrain_amplitude, 35.0, "Flat terrain amplitude should be 35.0 meters")
+	assert_almost_eq(generator.flat_terrain_amplitude, 0.08, 0.001, "Flat terrain amplitude should be 0.08 (normalized)")
 
 
 func test_get_heightmap_stats_basic():

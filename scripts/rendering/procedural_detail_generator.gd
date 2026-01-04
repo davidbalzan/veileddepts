@@ -8,15 +8,17 @@ class_name ProceduralDetailGenerator extends Node
 ## - Flat areas get enhanced detail to ensure visibility
 ## - Uses world-space coordinates for seamless chunk boundaries
 
-# Detail configuration (MODIFIED VALUES for terrain visibility)
-@export var detail_scale: float = 30.0  # meters - base amplitude of detail (was 2.0)
-@export var detail_frequency: float = 0.02  # Lower frequency for larger features (was 0.05)
-@export var detail_octaves: int = 4  # More octaves for natural variation (was 3)
-@export var detail_contribution: float = 0.5  # 50% contribution (was implicit 0.1)
+# Detail configuration (NORMALIZED VALUES - 0-1 range, converted to meters by ChunkRenderer)
+# With mission area range of 300m (-200m to +100m):
+#   0.05 normalized * 300m = 15m of gentle detail variation
+@export var detail_scale: float = 0.05  # normalized units (0-1 range), ~15m with 300m height range
+@export var detail_frequency: float = 0.005  # Very low frequency for smooth, rolling terrain
+@export var detail_octaves: int = 3  # Fewer octaves for smoother appearance
+@export var detail_contribution: float = 0.3  # 30% contribution - gentler detail
 
 # Flat terrain enhancement parameters
 @export var flat_terrain_threshold: float = 0.05  # 5% variation threshold
-@export var flat_terrain_amplitude: float = 35.0  # 20-50m range, use 35m for flat areas
+@export var flat_terrain_amplitude: float = 0.08  # normalized units, ~24m for flat areas
 
 # Slope thresholds for detail characteristics
 @export var steep_slope_threshold: float = 0.6  # radians - above this is "rocky"
@@ -38,7 +40,7 @@ func _initialize_noise() -> void:
 	_noise.fractal_octaves = detail_octaves
 	_noise.frequency = detail_frequency
 	_noise.fractal_lacunarity = 2.0
-	_noise.fractal_gain = 0.5
+	_noise.fractal_gain = 0.4  # Lower gain = smoother transitions between octaves
 
 
 ## Check if heightmap is flat (needs enhancement)

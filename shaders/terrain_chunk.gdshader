@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 // Textures
 uniform sampler2D biome_map : filter_nearest, repeat_disable;
@@ -165,11 +165,16 @@ void fragment() {
 	if (world_position.y < sea_level) {
 		float depth = sea_level - world_position.y;
 		
-		// Exponential darkening with depth
-		depth_factor = exp(-depth / underwater_visibility);
+		// Gentler exponential darkening - increase visibility range for gameplay
+		// Using 150m visibility instead of 50m for better seabed visibility
+		float effective_visibility = underwater_visibility * 3.0;
+		depth_factor = exp(-depth / effective_visibility);
+		
+		// Ensure minimum visibility (don't go completely black)
+		depth_factor = max(depth_factor, 0.25);
 		
 		// Add blue tint for underwater
-		vec3 water_tint = vec3(0.2, 0.4, 0.6);
+		vec3 water_tint = vec3(0.3, 0.5, 0.7);
 		blended_color = mix(blended_color * water_tint, blended_color, depth_factor);
 		
 		// Increase roughness underwater (less specular)

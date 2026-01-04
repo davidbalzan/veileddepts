@@ -35,15 +35,15 @@ This implementation plan addresses critical terrain visibility issues and establ
     - **Property 5: Procedural Detail Boundary Consistency**
     - **Validates: Requirements 6.1, 6.2**
 
-- [ ] 2. Fix Height Scaling
-  - [ ] 2.1 Update ChunkRenderer height scaling
+- [x] 2. Fix Height Scaling
+  - [x] 2.1 Update ChunkRenderer height scaling
     - Modify `scripts/rendering/chunk_renderer.gd`
     - Change `min_elevation` default from -10994.0 to -200.0
     - Change `max_elevation` default from 8849.0 to 100.0
     - Add mission area configuration support
     - _Requirements: 3.1, 3.2, 3.4_
 
-  - [ ] 2.2 Update ChunkManager to use correct detail generator call
+  - [x] 2.2 Update ChunkManager to use correct detail generator call
     - Fix `_apply_procedural_detail()` in `scripts/rendering/chunk_manager.gd`
     - Pass correct parameters to `generate_detail()`
     - Add heightmap statistics logging
@@ -53,7 +53,7 @@ This implementation plan addresses critical terrain visibility issues and establ
     - **Property 4: Mission Area Height Mapping**
     - **Validates: Requirements 3.2**
 
-- [ ] 3. Checkpoint - Verify Terrain Visibility
+- [x] 3. Checkpoint - Verify Terrain Visibility
   - Ensure terrain is visible when ocean is hidden
   - Verify height variation is >= 10 meters per chunk
   - Check console logs for heightmap statistics

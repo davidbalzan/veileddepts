@@ -20,12 +20,20 @@ class_name ChunkRenderer extends Node
 
 ## Height scaling (from normalized 0-1 to real-world elevation)
 ## These can be overridden for specific mission areas
-@export var min_elevation: float = -200.0  # Minimum terrain height (meters)
-@export var max_elevation: float = 100.0   # Maximum terrain height (meters)
+@export var min_elevation: float = -200.0  # Minimum terrain height (meters) - mission area default
+@export var max_elevation: float = 100.0   # Maximum terrain height (meters) - mission area default
 
 # Full Earth range (for reference, not used by default)
 const MARIANA_TRENCH_DEPTH: float = -10994.0
 const MOUNT_EVEREST_HEIGHT: float = 8849.0
+
+## Mission area configuration
+## When enabled, uses min_elevation/max_elevation for height scaling
+## When disabled, uses full Earth range (MARIANA_TRENCH_DEPTH to MOUNT_EVEREST_HEIGHT)
+@export var use_mission_area_scaling: bool = true
+
+## Signal emitted when mission area configuration changes
+signal mission_area_changed(min_elev: float, max_elev: float)
 
 ## Feature preservation
 @export var enable_feature_preservation: bool = true
@@ -63,9 +71,72 @@ func _ready() -> void:
 				"lod_levels": str(lod_levels),
 				"base_lod_distance": "%.1f" % base_lod_distance,
 				"lod_distance_multiplier": "%.1f" % lod_distance_multiplier,
-				"feature_preservation": str(enable_feature_preservation)
+				"feature_preservation": str(enable_feature_preservation),
+				"min_elevation": "%.1f" % min_elevation,
+				"max_elevation": "%.1f" % max_elevation,
+				"use_mission_area_scaling": str(use_mission_area_scaling)
 			}
 		)
+
+
+## Configure mission area height range
+##
+## Sets the elevation range for terrain height scaling.
+## Emits mission_area_changed signal when configuration changes.
+##
+## @param min_elev: Minimum elevation in meters (e.g., -200.0 for submarine gameplay)
+## @param max_elev: Maximum elevation in meters (e.g., 100.0 for coastal areas)
+func configure_mission_area(min_elev: float, max_elev: float) -> void:
+	if min_elev >= max_elev:
+		push_error("ChunkRenderer: Invalid mission area range: min (%.1f) must be less than max (%.1f)" % [min_elev, max_elev])
+		return
+	
+	min_elevation = min_elev
+	max_elevation = max_elev
+	use_mission_area_scaling = true
+	
+	if _logger:
+		_logger.log_info(
+			"ChunkRenderer",
+			"Mission area configured",
+			{
+				"min_elevation": "%.1f" % min_elevation,
+				"max_elevation": "%.1f" % max_elevation
+			}
+		)
+	
+	mission_area_changed.emit(min_elevation, max_elevation)
+
+
+## Get current mission area configuration
+##
+## @return: Dictionary with min_elevation, max_elevation, use_mission_area_scaling
+func get_mission_area_config() -> Dictionary:
+	return {
+		"min_elevation": min_elevation,
+		"max_elevation": max_elevation,
+		"use_mission_area_scaling": use_mission_area_scaling,
+		"elevation_range": max_elevation - min_elevation
+	}
+
+
+## Get the effective elevation range for height scaling
+##
+## Returns the min/max elevation values currently in use,
+## either mission area values or full Earth range.
+##
+## @return: Dictionary with min and max elevation
+func get_effective_elevation_range() -> Dictionary:
+	if use_mission_area_scaling:
+		return {
+			"min": min_elevation,
+			"max": max_elevation
+		}
+	else:
+		return {
+			"min": MARIANA_TRENCH_DEPTH,
+			"max": MOUNT_EVEREST_HEIGHT
+		}
 
 
 func _initialize_shader() -> void:
@@ -218,8 +289,11 @@ func _create_vertex_data(
 		hm_z = clamp(hm_z, 0, base_resolution - 1)
 
 	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
-	# Convert from normalized (0-1) to mission area elevation range
-	var height_value = lerp(min_elevation, max_elevation, height_normalized)
+	
+	# Get effective elevation range (mission area or full Earth range)
+	var elev_range = get_effective_elevation_range()
+	# Convert from normalized (0-1) to elevation range
+	var height_value = lerp(elev_range.min, elev_range.max, height_normalized)
 
 	# Calculate world position
 	var local_x = (float(x) / (lod_resolution - 1)) * chunk_size
@@ -252,8 +326,11 @@ func _create_vertex_data_from_heightmap_coord(
 	base_resolution: int
 ) -> VertexData:
 	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
-	# Convert from normalized (0-1) to mission area elevation range
-	var height_value = lerp(min_elevation, max_elevation, height_normalized)
+	
+	# Get effective elevation range (mission area or full Earth range)
+	var elev_range = get_effective_elevation_range()
+	# Convert from normalized (0-1) to elevation range
+	var height_value = lerp(elev_range.min, elev_range.max, height_normalized)
 
 	# Calculate local position within chunk
 	var local_x = (float(hm_x) / (base_resolution - 1)) * chunk_size
