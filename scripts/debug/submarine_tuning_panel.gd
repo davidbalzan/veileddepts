@@ -28,14 +28,14 @@ func _ready() -> void:
 	# Find submarine physics (retry a few times as it's initialized async)
 	var main_node = get_parent()
 	for i in range(20):  # Try for 10 seconds
-		submarine_physics = main_node.get_node_or_null("SubmarinePhysics")
+		submarine_physics = main_node.get_node_or_null("SubmarinePhysicsV2")
 		if submarine_physics:
-			print("SubmarineTuningPanel: Found SubmarinePhysics")
+			print("SubmarineTuningPanel: Found SubmarinePhysicsV2")
 			break
 		await get_tree().create_timer(0.5).timeout
 
 	if not submarine_physics:
-		push_error("SubmarineTuningPanel: SubmarinePhysics not found after waiting")
+		push_error("SubmarineTuningPanel: SubmarinePhysicsV2 not found after waiting")
 		return
 
 	# Create UI

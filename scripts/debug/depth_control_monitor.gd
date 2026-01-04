@@ -3,7 +3,7 @@ extends Node
 ## Displays real-time depth control metrics and logs oscillation behavior
 
 var simulation_state: SimulationState
-var submarine_physics: SubmarinePhysics
+var submarine_physics: SubmarinePhysicsV2
 var submarine_body: RigidBody3D
 
 # Monitoring data
@@ -28,7 +28,7 @@ var label: Label
 func _ready() -> void:
 	# Find required nodes
 	simulation_state = get_node_or_null("/root/Main/SimulationState")
-	submarine_physics = get_node_or_null("/root/Main/SubmarinePhysics")
+	submarine_physics = get_node_or_null("/root/Main/SubmarinePhysicsV2")
 	submarine_body = get_node_or_null("/root/Main/SubmarineModel")
 
 	if not simulation_state or not submarine_body:

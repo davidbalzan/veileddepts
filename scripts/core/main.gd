@@ -3,8 +3,8 @@ extends Node
 ##
 ## This script initializes all core systems and manages the main game loop.
 
-# Preload physics class
-const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics.gd")
+# Preload physics class (V2 - component-based architecture)
+const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
 
 # References to core systems
 @onready var view_manager: Node = $ViewManager
@@ -132,9 +132,9 @@ func _setup_terrain_renderer() -> void:
 
 
 func _create_submarine_physics() -> void:
-	"""Create and initialize the submarine physics system"""
+	"""Create and initialize the submarine physics system (V2)"""
 	submarine_physics = SubmarinePhysicsClass.new()
-	submarine_physics.name = "SubmarinePhysics"
+	submarine_physics.name = "SubmarinePhysicsV2"
 	add_child(submarine_physics)
 
 	# Initialize with references to required systems

@@ -1,5 +1,5 @@
 extends GutTest
-## Unit tests for SubmarinePhysics system
+## Unit tests for SubmarinePhysicsV2 system
 ##
 ## Tests submarine physics calculations including:
 ## - Buoyancy forces
@@ -8,12 +8,12 @@ extends GutTest
 ## - Depth control
 ## - State synchronization
 
-var submarine_physics: Node  # SubmarinePhysics instance
+var submarine_physics: Node  # SubmarinePhysicsV2 instance
 var submarine_body: RigidBody3D
 var ocean_renderer: OceanRenderer
 var simulation_state: SimulationState
 
-const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics.gd")
+const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
 
 
 func before_each():

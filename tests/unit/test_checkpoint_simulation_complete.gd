@@ -48,7 +48,7 @@ func before_each():
 	submarine_body.add_child(collision_shape)
 
 	# Create submarine physics
-	submarine_physics = load("res://scripts/physics/submarine_physics.gd").new()
+	submarine_physics = load("res://scripts/physics/submarine_physics_v2.gd").new()
 	submarine_physics.name = "SubmarinePhysics"
 	add_child_autofree(submarine_physics)
 	submarine_physics.initialize(submarine_body, ocean_renderer, simulation_state)

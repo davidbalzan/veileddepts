@@ -266,6 +266,20 @@ func _generate_heightmap(chunk: TerrainChunk) -> void:
 
 	if not chunk.base_heightmap:
 		push_error("ChunkManager: Failed to generate heightmap for chunk %s" % chunk.chunk_coord)
+		return
+	
+	# Debug: Check heightmap variation
+	var min_val = 1.0
+	var max_val = 0.0
+	for y in range(chunk.base_heightmap.get_height()):
+		for x in range(chunk.base_heightmap.get_width()):
+			var val = chunk.base_heightmap.get_pixel(x, y).r
+			min_val = min(min_val, val)
+			max_val = max(max_val, val)
+	
+	print("ChunkManager: Heightmap for chunk %s - min: %.3f, max: %.3f, range: %.3f" % [
+		chunk.chunk_coord, min_val, max_val, max_val - min_val
+	])
 
 
 ## Generate biome map for a chunk

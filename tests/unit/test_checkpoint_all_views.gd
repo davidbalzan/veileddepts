@@ -15,7 +15,7 @@ var submarine_body: RigidBody3D
 var ocean_renderer: OceanRenderer
 var fog_of_war: FogOfWarSystem
 
-const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics.gd")
+const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
 
 
 func before_each():
