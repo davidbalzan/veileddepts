@@ -24,7 +24,7 @@ signal update_progress(progress: float, operation: String)
 # Constants for elevation scaling
 const MARIANA_TRENCH_DEPTH: float = -10994.0  # Lowest point on Earth (meters)
 const MOUNT_EVEREST_HEIGHT: float = 8849.0    # Highest point on Earth (meters)
-const DEFAULT_SEA_LEVEL: float = 0.554        # Normalized value for 0m elevation
+const DEFAULT_SEA_LEVEL: float = 0.561        # Normalized value for 0m elevation
 
 # Performance constants
 const UPDATE_THROTTLE_MS: float = 100.0  # Minimum time between updates (milliseconds)
