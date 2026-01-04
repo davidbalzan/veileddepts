@@ -103,7 +103,6 @@ mass = 8000000.0
 gravity_scale = 1.0
 linear_damp = 0.0
 angular_damp = 0.5
-axis_lock_angular_x = true
 axis_lock_angular_z = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="SubmarineModel"]
