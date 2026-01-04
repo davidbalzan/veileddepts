@@ -232,12 +232,12 @@ func _create_debug_panel() -> void:
 	sea_level_value.name = "SeaLevelValue"
 	var current_normalized = SeaLevelManager.get_sea_level_normalized()
 	var current_meters = SeaLevelManager.get_sea_level_meters()
-	sea_level_value.text = "%.3f (%.0fm elevation, Default: 0.554)" % [current_normalized, current_meters]
+	sea_level_value.text = "%.3f (%.0fm elevation, Default: 0.561)" % [current_normalized, current_meters]
 	sea_level_value.add_theme_font_size_override("font_size", 14)
 	sea_level_value.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
 	vbox.add_child(sea_level_value)
 	
-	# Sea level slider - focused range around 0.554 default
+	# Sea level slider - focused range around 0.561 default
 	_sea_level_slider = HSlider.new()
 	_sea_level_slider.name = "SeaLevelSlider"
 	_sea_level_slider.min_value = 0.50
@@ -825,7 +825,7 @@ func _on_sea_level_changed(normalized: float, meters: float = NAN) -> void:
 	if _debug_panel:
 		var value_label = _debug_panel.find_child("SeaLevelValue", true, false)
 		if value_label:
-			value_label.text = "%.3f (%.0fm elevation, Default: 0.554)" % [normalized, meters]
+			value_label.text = "%.3f (%.0fm elevation, Default: 0.561)" % [normalized, meters]
 	
 	# Regenerate the map with new sea level
 	if global_map_image:
@@ -859,7 +859,7 @@ func _on_reset_sea_level() -> void:
 	if _debug_panel:
 		var value_label = _debug_panel.find_child("SeaLevelValue", true, false)
 		if value_label:
-			value_label.text = "%.3f (%.0fm elevation, Default: 0.554)" % [SeaLevelManager.get_sea_level_normalized(), elevation_meters]
+			value_label.text = "%.3f (%.0fm elevation, Default: 0.561)" % [SeaLevelManager.get_sea_level_normalized(), elevation_meters]
 	
 	# Regenerate the map with default sea level
 	if global_map_image:
@@ -877,7 +877,7 @@ func _on_reset_sea_level() -> void:
 		if map_zoom > 1.5:
 			_generate_detail_texture()
 	
-	print("WholeMapView: Sea level reset to default (0.554 / 0m elevation)")
+	print("WholeMapView: Sea level reset to default (0.561 / 0m elevation)")
 
 
 ## Handle progress updates from SeaLevelManager
