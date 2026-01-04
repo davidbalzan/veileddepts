@@ -20,6 +20,9 @@ var _terrain_generation_attempted: bool = false
 var _last_generated_zoom: float = 1.0
 var _last_generated_pos: Vector3 = Vector3.ZERO
 var _zoom_settle_timer: float = 0.0
+var _current_lod: int = 3  # Start with lowest detail
+var _target_lod: int = 0  # Target LOD based on zoom
+var _loading_higher_detail: bool = false  # Flag to prevent multiple async loads
 
 ## Help overlay
 var help_overlay: Control = null
@@ -558,17 +561,38 @@ func _process(_delta: float) -> void:
 	if not visible or not simulation_state:
 		return
 
+	# Requirements 9.2: Progressive loading for smooth zooming
 	# Trigger regeneration if zoom changes significantly or we move far enough
 	if visible and terrain_texture and terrain_renderer:
-		var zoom_changed = abs(map_zoom - _last_generated_zoom) / _last_generated_zoom > 0.15
+		var zoom_changed = abs(map_zoom - _last_generated_zoom) / max(_last_generated_zoom, 0.01) > 0.15
 		var pos_diff = simulation_state.submarine_position.distance_to(_last_generated_pos)
 		var moved_far = pos_diff > 500.0 # Refresh every 500m
 		
 		if zoom_changed or moved_far:
 			_zoom_settle_timer += _delta
 			if _zoom_settle_timer > 0.3: # Settle for 300ms
-				print("TacticalMapView: Resampling terrain (Zoom/Movement)...")
-				_generate_terrain_texture()
+				# Calculate target LOD for current zoom
+				var elevation_provider = terrain_renderer.get_node_or_null("TiledElevationProvider")
+				if elevation_provider and elevation_provider.has_method("get_lod_for_zoom"):
+					# Calculate meters per pixel based on current zoom and world size
+					var viewport_size = get_viewport().get_visible_rect().size
+					var screen_width_meters = viewport_size.x / (map_scale * map_zoom)
+					var meters_per_pixel = screen_width_meters / 512.0
+					_target_lod = elevation_provider.get_lod_for_zoom(meters_per_pixel)
+					
+					# If we need higher detail and not already loading
+					if _target_lod < _current_lod and not _loading_higher_detail:
+						print("TacticalMapView: Progressive loading - upgrading from LOD %d to LOD %d (%.1f m/px)" % [_current_lod, _target_lod, meters_per_pixel])
+						_loading_higher_detail = true
+						_generate_terrain_texture_async()
+					elif _target_lod != _current_lod:
+						# Direct regeneration for zoom out or first load
+						print("TacticalMapView: Resampling terrain (Zoom/Movement) - LOD %d (%.1f m/px)" % [_target_lod, meters_per_pixel])
+						_generate_terrain_texture()
+				else:
+					# Fallback to direct regeneration
+					print("TacticalMapView: Resampling terrain (Zoom/Movement)...")
+					_generate_terrain_texture()
 				_zoom_settle_timer = 0.0
 		else:
 			_zoom_settle_timer = 0.0
@@ -676,9 +700,10 @@ func _generate_terrain_texture() -> void:
 		push_warning("TacticalMapView: Terrain renderer not initialized yet")
 		return
 
-	# Check if terrain renderer has the new streaming system (try both names)
+	# Requirements 9.2: Use TiledElevationProvider for unified elevation data
 	var elevation_provider = terrain_renderer.get_node_or_null("TiledElevationProvider")
 	if not elevation_provider:
+		# Fallback to old provider name for compatibility
 		elevation_provider = terrain_renderer.get_node_or_null("ElevationDataProvider")
 	if not elevation_provider:
 		push_warning("TacticalMapView: No elevation provider available")
@@ -691,10 +716,6 @@ func _generate_terrain_texture() -> void:
 
 	print("TacticalMapView: Found elevation provider, generating preview...")
 
-	# Generate a preview texture from the elevation data
-	# Using 256x256 for a good balance of sharpness and generation speed (~100-150ms)
-	var preview_size = 256
-	
 	# Calculate world size needed to cover screen + wide margin to reduce jitter
 	var viewport_size = get_viewport().get_visible_rect().size
 	var required_world_w = viewport_size.x / (map_scale * map_zoom)
@@ -706,21 +727,35 @@ func _generate_terrain_texture() -> void:
 	
 	var start_time = Time.get_ticks_msec()
 
-	# Use extract_region if available, otherwise fallback to point sampling
+	# Requirements 9.2: Use extract_region_lod() for zoom-based detail
 	var elevation_image: Image = null
-	if elevation_provider.has_method("extract_region"):
-		var world_bounds = Rect2(
-			simulation_state.submarine_position.x - terrain_world_size/2.0,
-			simulation_state.submarine_position.z - terrain_world_size/2.0,
-			terrain_world_size,
-			terrain_world_size
-		)
-		elevation_image = elevation_provider.extract_region(world_bounds, preview_size)
+	var world_bounds = Rect2(
+		simulation_state.submarine_position.x - terrain_world_size/2.0,
+		simulation_state.submarine_position.z - terrain_world_size/2.0,
+		terrain_world_size,
+		terrain_world_size
+	)
+	
+	# Calculate meters per pixel for LOD selection (based on screen width)
+	var screen_width_meters = viewport_size.x / (map_scale * map_zoom)
+	var meters_per_pixel = screen_width_meters / 512.0  # Using 512x512 output
+	
+	# Use LOD-based extraction if available (Requirements 8.5, 9.2)
+	if elevation_provider.has_method("extract_region_lod") and elevation_provider.has_method("get_lod_for_zoom"):
+		var lod_level = elevation_provider.get_lod_for_zoom(meters_per_pixel)
+		print("TacticalMapView: Using LOD level %d (%.1f m/px)" % [lod_level, meters_per_pixel])
+		elevation_image = elevation_provider.extract_region_lod(world_bounds, lod_level)
+	elif elevation_provider.has_method("extract_region"):
+		# Fallback to standard extraction
+		elevation_image = elevation_provider.extract_region(world_bounds, 512)
 	
 	if not elevation_image:
 		push_error("TacticalMapView: Failed to extract elevation region")
 		_terrain_generation_attempted = true
 		return
+
+	# Get output resolution from the extracted image
+	var preview_size = elevation_image.get_width()
 
 	# Find local min/max for dynamic range
 	var local_min = 10000.0
@@ -791,6 +826,123 @@ func _generate_terrain_texture() -> void:
 	var duration = Time.get_ticks_msec() - start_time
 	print("TacticalMapView: Terrain texture generated in %d ms" % duration)
 	_terrain_generation_attempted = true
+	
+	# Update current LOD based on what we just generated
+	if elevation_provider.has_method("get_lod_for_zoom"):
+		_current_lod = elevation_provider.get_lod_for_zoom(meters_per_pixel)
+	else:
+		_current_lod = 0  # Assume full detail if LOD not supported
+
+
+## Generate terrain texture asynchronously for progressive loading
+## Requirements 9.2: Implement progressive loading for smooth zooming
+func _generate_terrain_texture_async() -> void:
+	if not terrain_renderer or not simulation_state:
+		_loading_higher_detail = false
+		return
+	
+	var elevation_provider = terrain_renderer.get_node_or_null("TiledElevationProvider")
+	if not elevation_provider:
+		_loading_higher_detail = false
+		return
+	
+	# Calculate world bounds
+	var world_bounds = Rect2(
+		simulation_state.submarine_position.x - terrain_world_size/2.0,
+		simulation_state.submarine_position.z - terrain_world_size/2.0,
+		terrain_world_size,
+		terrain_world_size
+	)
+	
+	# Calculate meters per pixel for LOD selection
+	var meters_per_pixel = terrain_world_size / 512.0
+	
+	# Get target LOD
+	var lod_level = _target_lod
+	if elevation_provider.has_method("get_lod_for_zoom"):
+		lod_level = elevation_provider.get_lod_for_zoom(meters_per_pixel)
+	
+	print("TacticalMapView: Async loading terrain at LOD %d..." % lod_level)
+	
+	# Extract elevation data at target LOD
+	var elevation_image: Image = null
+	if elevation_provider.has_method("extract_region_lod"):
+		elevation_image = elevation_provider.extract_region_lod(world_bounds, lod_level)
+	elif elevation_provider.has_method("extract_region"):
+		elevation_image = elevation_provider.extract_region(world_bounds, 512)
+	
+	if not elevation_image:
+		print("TacticalMapView: Failed to load higher detail terrain")
+		_loading_higher_detail = false
+		return
+	
+	# Process the image (same as synchronous version)
+	var preview_size = elevation_image.get_width()
+	
+	# Find local min/max
+	var local_min = 10000.0
+	var local_max = -10000.0
+	for y in range(preview_size):
+		for x in range(preview_size):
+			var px = elevation_image.get_pixel(x, y)
+			var elevation = lerp(-10994.0, 8849.0, px.r)
+			local_min = min(local_min, elevation)
+			local_max = max(local_max, elevation)
+	
+	# Get sea level
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	
+	# Colorize
+	var new_terrain_image = Image.create(preview_size, preview_size, false, Image.FORMAT_RGBA8)
+	
+	var abyss_color = Color(0.00, 0.02, 0.10, 1.0)
+	var shallow_blue = Color(0.20, 0.40, 0.80, 1.0)
+	var beach = Color(0.80, 0.75, 0.55, 1.0)
+	var mount = Color(0.60, 0.60, 0.60, 1.0)
+	
+	for y in range(preview_size):
+		for x in range(preview_size):
+			var px = elevation_image.get_pixel(x, y)
+			var elevation = lerp(-10994.0, 8849.0, px.r)
+			
+			var color: Color
+			if local_max < -100.0:
+				var min_variation = 300.0
+				var range_val = max(min_variation, local_max - local_min)
+				var t = clamp((elevation - local_min) / range_val, 0.0, 1.0)
+				
+				var abyss = Color(0.0, 0.02, 0.08, 1.0)
+				var mid_deep = Color(0.01, 0.08, 0.25, 1.0)
+				var shelf = Color(0.05, 0.25, 0.50, 1.0)
+				
+				if t < 0.5:
+					color = abyss.lerp(mid_deep, t * 2.0)
+				else:
+					color = mid_deep.lerp(shelf, (t - 0.5) * 2.0)
+			else:
+				if elevation < sea_level_meters - 500.0:
+					color = abyss_color
+				elif elevation < sea_level_meters:
+					var t = (elevation - (sea_level_meters - 500.0)) / 500.0
+					color = abyss_color.lerp(shallow_blue, t)
+				elif elevation < sea_level_meters + 100.0:
+					var t = (elevation - sea_level_meters) / 100.0
+					color = beach.lerp(Color.DARK_GREEN, t)
+				else:
+					color = mount
+			
+			new_terrain_image.set_pixel(x, y, color)
+	
+	# Upscale
+	new_terrain_image.resize(512, 512, Image.INTERPOLATE_BILINEAR)
+	
+	# Update texture
+	terrain_image = new_terrain_image
+	terrain_texture = ImageTexture.create_from_image(terrain_image)
+	_current_lod = lod_level
+	_loading_higher_detail = false
+	
+	print("TacticalMapView: Async terrain load complete at LOD %d" % lod_level)
 
 
 ## Draw terrain as background

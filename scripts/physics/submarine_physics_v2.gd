@@ -33,7 +33,7 @@ var _cache_frame: int = -1
 var mass: float = 8000.0  # tons
 var max_speed: float = 10.3  # m/s (20 knots)
 var max_depth: float = 400.0  # meters
-var map_boundary: float = 974.0  # ±974m from origin (50m buffer from 1024m terrain edge)
+# Note: map_boundary removed - dynamic terrain streaming allows unlimited exploration
 
 # Debug mode (Requirement 14.1)
 var debug_mode: bool = false:
@@ -51,7 +51,7 @@ const SUBMARINE_CLASSES = {
 		"max_depth": 450.0,
 		"propulsion": {"max_thrust": 45000000.0, "kp_speed": 1.5, "max_speed": 15.4},
 		"drag": {"base_forward_drag": 4500.0, "sideways_drag": 1800000.0},
-		"rudder": {"torque_coefficient": 2500000.0, "max_turn_rate": 6.0},
+		"rudder": {"torque_coefficient": 280000.0, "max_turn_rate": 3.0},
 		"dive_planes": {"torque_coefficient": 1200000.0},
 		"ballast": {"max_ballast_force": 45000000.0},
 		"buoyancy": {"submarine_volume": 6000.0}
@@ -64,7 +64,7 @@ const SUBMARINE_CLASSES = {
 		"max_depth": 300.0,
 		"propulsion": {"max_thrust": 60000000.0, "kp_speed": 1.3, "max_speed": 12.9},
 		"drag": {"base_forward_drag": 6000.0, "sideways_drag": 2400000.0},
-		"rudder": {"torque_coefficient": 1500000.0, "max_turn_rate": 3.0},
+		"rudder": {"torque_coefficient": 200000.0, "max_turn_rate": 2.0},
 		"dive_planes": {"torque_coefficient": 1500000.0},
 		"ballast": {"max_ballast_force": 70000000.0},
 		"buoyancy": {"submarine_volume": 18000.0}
@@ -77,7 +77,7 @@ const SUBMARINE_CLASSES = {
 		"max_depth": 490.0,
 		"propulsion": {"max_thrust": 40000000.0, "kp_speed": 1.5, "max_speed": 12.9},
 		"drag": {"base_forward_drag": 4800.0, "sideways_drag": 1920000.0},
-		"rudder": {"torque_coefficient": 2300000.0, "max_turn_rate": 5.5},
+		"rudder": {"torque_coefficient": 260000.0, "max_turn_rate": 3.0},
 		"dive_planes": {"torque_coefficient": 1100000.0},
 		"ballast": {"max_ballast_force": 48000000.0},
 		"buoyancy": {"submarine_volume": 7800.0}
@@ -90,7 +90,7 @@ const SUBMARINE_CLASSES = {
 		"max_depth": 600.0,
 		"propulsion": {"max_thrust": 55000000.0, "kp_speed": 1.6, "max_speed": 18.0},
 		"drag": {"base_forward_drag": 4200.0, "sideways_drag": 1680000.0},
-		"rudder": {"torque_coefficient": 3000000.0, "max_turn_rate": 7.0},
+		"rudder": {"torque_coefficient": 320000.0, "max_turn_rate": 3.5},
 		"dive_planes": {"torque_coefficient": 1300000.0},
 		"ballast": {"max_ballast_force": 52000000.0},
 		"buoyancy": {"submarine_volume": 9100.0}
@@ -103,7 +103,7 @@ const SUBMARINE_CLASSES = {
 		"max_depth": 400.0,
 		"propulsion": {"max_thrust": 50000000.0, "kp_speed": 1.5, "max_speed": 10.3},
 		"drag": {"base_forward_drag": 5000.0, "sideways_drag": 2000000.0},
-		"rudder": {"torque_coefficient": 2000000.0, "max_turn_rate": 5.0},
+		"rudder": {"torque_coefficient": 250000.0, "max_turn_rate": 3.0},
 		"dive_planes": {"torque_coefficient": 1000000.0},
 		"ballast": {"max_ballast_force": 50000000.0},
 		"buoyancy": {"submarine_volume": 8000.0}
@@ -157,8 +157,8 @@ func _instantiate_components() -> void:
 		{"max_thrust": 50000000.0, "kp_speed": 1.5, "max_speed": max_speed}
 	)
 
-	# Create rudder system
-	rudder_system = RudderSystem.new({"torque_coefficient": 2000000.0, "max_turn_rate": 5.0})
+	# Create rudder system - use realistic values (submarines turn slowly)
+	rudder_system = RudderSystem.new({"torque_coefficient": 250000.0, "max_turn_rate": 3.0})
 	rudder_system.debug_mode = debug_mode
 	rudder_system.log_callback = _log_debug
 
@@ -282,8 +282,7 @@ func update_physics(delta: float) -> void:
 	# Step 11: Clamp velocity - Requirement 10.1
 	physics_validator.clamp_velocity(submarine_body, max_speed)
 
-	# Step 12: Enforce boundaries - Requirement 11.1
-	physics_validator.enforce_boundaries(submarine_body, map_boundary)
+	# Note: Map boundaries removed - dynamic terrain streaming allows unlimited exploration
 
 
 ## Get current submarine state for synchronization

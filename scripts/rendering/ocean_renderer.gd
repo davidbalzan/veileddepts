@@ -7,7 +7,7 @@ var camera: Camera3D
 var initialized: bool = false
 
 @export_group("Wave Settings")
-@export var wind_speed: float = 30.0
+@export var wind_speed: float = 5.0  # Lower wind = smaller waves (~0.20m)
 @export var wind_direction_degrees: float = 0.0
 @export_range(0.0, 2.5, 0.1) var choppiness: float = 1.5
 @export var time_scale: float = 1.0
@@ -18,7 +18,7 @@ var initialized: bool = false
 
 @export_group("LOD Settings")
 @export var lod_level: int = 6
-@export var quad_size: float = 16384.0
+@export var quad_size: float = 4096.0  # Reduced from 16384 to avoid occluding distant coastlines
 @export var mesh_vertex_resolution: int = 128
 
 @export_group("Ocean Level")
@@ -70,6 +70,10 @@ func _setup_ocean() -> void:
 
 	ocean.initialize_simulation()
 	await get_tree().process_frame
+	
+	# Set default wave amplitude to 0.2 for calmer seas
+	ocean.amplitude_scale_max = 0.2
+	ocean.amplitude_scale_min = 0.05  # 25% of max for distant waves
 
 	quad_tree = QuadTree3D.new()
 	quad_tree.lod_level = lod_level

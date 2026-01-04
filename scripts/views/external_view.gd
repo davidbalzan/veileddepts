@@ -17,7 +17,7 @@ var simulation_state: SimulationState
 var fog_of_war: FogOfWarSystem
 
 ## Camera control parameters
-var camera_distance: float = 100.0  # Distance from submarine in meters
+var camera_distance: float = 40.0  # Distance from submarine in meters (closer default for better visibility)
 var camera_tilt: float = 30.0  # Vertical angle in degrees (-89 to 89)
 var camera_rotation: float = 0.0  # Horizontal rotation in degrees (0-360)
 var free_camera_mode: bool = false  # Whether camera moves independently
@@ -35,6 +35,8 @@ const MAX_TILT: float = 89.0  # Maximum upward tilt
 const TILT_SENSITIVITY: float = 0.3  # degrees per pixel
 const ROTATION_SENSITIVITY: float = 0.3  # degrees per pixel
 const DISTANCE_SENSITIVITY: float = 5.0  # meters per scroll unit
+const KEYBOARD_ZOOM_SENSITIVITY: float = 2.0  # meters per key press
+const PINCH_ZOOM_SENSITIVITY: float = 100.0  # meters per pinch unit
 const FREE_CAMERA_SPEED: float = 50.0  # meters per second
 
 ## Input state
@@ -50,6 +52,11 @@ var target_arrow: Node3D = null
 
 ## Seabed depth HUD
 var seabed_hud: SeabedDepthHUD = null
+
+## Underwater environment
+var underwater_environment: Environment = null
+var surface_environment: Environment = null
+var ocean_renderer: Node = null
 
 
 func _ready() -> void:
@@ -70,8 +77,16 @@ func _ready() -> void:
 	if not fog_of_war:
 		push_warning("ExternalView: FogOfWarSystem not found, all contacts will be visible")
 
+	# Find ocean renderer for underwater detection
+	ocean_renderer = main_node.get_node_or_null("OceanRenderer")
+	if not ocean_renderer:
+		push_warning("ExternalView: OceanRenderer not found, underwater detection will use fixed depth")
+
 	# Initialize camera position
 	update_camera_position()
+
+	# Setup underwater environment
+	_setup_underwater_environment()
 
 	# Create debug arrow nodes
 	_create_debug_arrows()
@@ -228,6 +243,9 @@ func _process(delta: float) -> void:
 	# Update camera position to track submarine (or maintain free camera position)
 	update_camera_position()
 
+	# Update underwater environment based on camera position
+	_update_underwater_environment()
+
 	# Update debug vectors if enabled
 	if show_debug_vectors:
 		_update_debug_vectors()
@@ -264,18 +282,25 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		var mouse_motion = event as InputEventMouseMotion
 
-		# Right mouse button for rotation
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		# Left mouse button drag for rotation (trackpad-friendly)
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			var delta_rotation = mouse_motion.relative.x * ROTATION_SENSITIVITY
 			handle_rotation_input(delta_rotation)
-
-		# Middle mouse button for tilt (pitch up/down)
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+			# Vertical movement for tilt while dragging
 			var delta_tilt = -mouse_motion.relative.y * TILT_SENSITIVITY
 			handle_tilt_input(delta_tilt)
 
-		# Shift + Right mouse button for tilt (alternative)
-		if Input.is_key_pressed(KEY_SHIFT) and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		# Right mouse button for rotation only (legacy)
+		elif Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			var delta_rotation = mouse_motion.relative.x * ROTATION_SENSITIVITY
+			handle_rotation_input(delta_rotation)
+			# Shift + Right for tilt
+			if Input.is_key_pressed(KEY_SHIFT):
+				var delta_tilt = -mouse_motion.relative.y * TILT_SENSITIVITY
+				handle_tilt_input(delta_tilt)
+
+		# Middle mouse button for tilt (pitch up/down)
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 			var delta_tilt = -mouse_motion.relative.y * TILT_SENSITIVITY
 			handle_tilt_input(delta_tilt)
 
@@ -290,31 +315,55 @@ func _input(event: InputEvent) -> void:
 				# Zoom out (increase distance)
 				handle_distance_input(DISTANCE_SENSITIVITY)
 
-	# Handle F key for free camera toggle and F3 for debug vectors
+	# Handle pinch-to-zoom gesture (trackpad)
+	elif event is InputEventMagnifyGesture:
+		var magnify = event as InputEventMagnifyGesture
+		# factor > 1 = pinch out (zoom in), factor < 1 = pinch in (zoom out)
+		var zoom_delta = (1.0 - magnify.factor) * PINCH_ZOOM_SENSITIVITY
+		handle_distance_input(zoom_delta)
+
+	# Handle two-finger pan gesture (trackpad)
+	elif event is InputEventPanGesture:
+		var pan = event as InputEventPanGesture
+		# Horizontal pan for rotation, vertical pan for tilt
+		handle_rotation_input(pan.delta.x * ROTATION_SENSITIVITY * 10.0)
+		handle_tilt_input(-pan.delta.y * TILT_SENSITIVITY * 10.0)
+
+	# Handle keyboard input
 	elif event is InputEventKey:
 		var key_event = event as InputEventKey
-		if key_event.pressed and not key_event.echo:
-			if key_event.keycode == KEY_F:
-				toggle_free_camera()
-			elif key_event.keycode == KEY_F3:
-				# Toggle debug vector visualization
-				show_debug_vectors = not show_debug_vectors
-				if thrust_arrow:
-					thrust_arrow.visible = show_debug_vectors
-				if velocity_arrow:
-					velocity_arrow.visible = show_debug_vectors
-				if target_arrow:
-					target_arrow.visible = show_debug_vectors
-				var sub_forward_arrow = get_node_or_null("SubForwardArrow")
-				if sub_forward_arrow:
-					sub_forward_arrow.visible = show_debug_vectors
-				print(
-					"ExternalView: Debug vectors ", "enabled" if show_debug_vectors else "disabled"
-				)
-			elif key_event.keycode == KEY_P:
-				# Toggle pause
-				get_tree().paused = not get_tree().paused
-				print("Game ", "PAUSED" if get_tree().paused else "RESUMED")
+		if key_event.pressed:
+			# Zoom controls with + and - keys (with repeat support)
+			if key_event.keycode == KEY_EQUAL or key_event.keycode == KEY_KP_ADD:
+				# Zoom in (+ key)
+				handle_distance_input(-KEYBOARD_ZOOM_SENSITIVITY)
+			elif key_event.keycode == KEY_MINUS or key_event.keycode == KEY_KP_SUBTRACT:
+				# Zoom out (- key)
+				handle_distance_input(KEYBOARD_ZOOM_SENSITIVITY)
+
+			# Non-repeating keys
+			if not key_event.echo:
+				if key_event.keycode == KEY_F:
+					toggle_free_camera()
+				elif key_event.keycode == KEY_F3:
+					# Toggle debug vector visualization
+					show_debug_vectors = not show_debug_vectors
+					if thrust_arrow:
+						thrust_arrow.visible = show_debug_vectors
+					if velocity_arrow:
+						velocity_arrow.visible = show_debug_vectors
+					if target_arrow:
+						target_arrow.visible = show_debug_vectors
+					var sub_forward_arrow = get_node_or_null("SubForwardArrow")
+					if sub_forward_arrow:
+						sub_forward_arrow.visible = show_debug_vectors
+					print(
+						"ExternalView: Debug vectors ", "enabled" if show_debug_vectors else "disabled"
+					)
+				elif key_event.keycode == KEY_P:
+					# Toggle pause
+					get_tree().paused = not get_tree().paused
+					print("Game ", "PAUSED" if get_tree().paused else "RESUMED")
 
 
 ## Get contacts that should be rendered based on fog of war
@@ -467,3 +516,67 @@ func _position_arrow(arrow: Node3D, start_pos: Vector3, direction: Vector3, leng
 	var shaft = arrow.get_node_or_null("Shaft")
 	if shaft:
 		shaft.height = length
+
+
+## Setup underwater environment for when camera is submerged
+func _setup_underwater_environment() -> void:
+	# Store the current environment as surface environment
+	if camera:
+		surface_environment = camera.environment
+	
+	# Create underwater environment
+	underwater_environment = Environment.new()
+
+	# Configure underwater fog - blue-green murky water
+	underwater_environment.fog_enabled = true
+	underwater_environment.fog_light_color = Color(0.1, 0.3, 0.4)  # Blue-green underwater color
+	underwater_environment.fog_density = 0.03  # Slightly less dense than periscope for better visibility
+	underwater_environment.fog_aerial_perspective = 0.5
+
+	# Configure ambient lighting for underwater
+	underwater_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	underwater_environment.ambient_light_color = Color(0.2, 0.4, 0.5)  # Dim blue-green ambient
+	underwater_environment.ambient_light_energy = 0.4  # Slightly brighter than periscope for gameplay
+
+	# Adjust tonemap for darker underwater environment
+	underwater_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	underwater_environment.tonemap_exposure = 0.8  # Slightly brighter than periscope
+
+	# Copy sky settings from surface environment if available
+	if surface_environment:
+		underwater_environment.background_mode = surface_environment.background_mode
+		underwater_environment.sky = surface_environment.sky
+
+	print("ExternalView: Underwater environment configured")
+
+
+## Check if camera is underwater
+func _is_camera_underwater() -> bool:
+	if not camera:
+		return false
+	
+	var camera_y = camera.global_position.y
+	var sea_level = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+	
+	# Get wave height at camera position if ocean renderer available
+	if ocean_renderer and ocean_renderer.has_method("get_wave_height_at_position"):
+		var camera_xz = Vector2(camera.global_position.x, camera.global_position.z)
+		var wave_height = ocean_renderer.get_wave_height_at_position(camera_xz)
+		sea_level += wave_height
+	
+	return camera_y < sea_level
+
+
+## Update camera environment based on whether it's underwater
+func _update_underwater_environment() -> void:
+	if not camera:
+		return
+	
+	var is_underwater = _is_camera_underwater()
+	
+	if is_underwater:
+		if camera.environment != underwater_environment:
+			camera.environment = underwater_environment
+	else:
+		if camera.environment != surface_environment:
+			camera.environment = surface_environment

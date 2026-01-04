@@ -17,7 +17,7 @@ const TiledElevationProviderScript = preload("res://scripts/rendering/tiled_elev
 # Internal state
 var _chunk_grid: Dictionary = {}  # Vector2i -> TerrainChunk
 var _chunk_coordinates: ChunkCoordinates = null
-var _elevation_provider = null  # TiledElevationProvider or ElevationDataProvider
+var _elevation_provider = null  # TiledElevationProvider (unified elevation data source)
 var _logger: TerrainLogger = null
 var _total_memory_bytes: int = 0
 var _lru_list: Array[Vector2i] = []  # Least recently used order
@@ -35,12 +35,13 @@ func _ready() -> void:
 		_logger.name = "TerrainLogger"
 		# Don't add as child, just use locally
 
-	# Find elevation provider from parent (TerrainRenderer) or create fallback
+	# Find TiledElevationProvider from parent (TerrainRenderer) or create one
+	# Requirements 9.1: Use unified elevation data source
 	_elevation_provider = get_node_or_null("../TiledElevationProvider")
 	if not _elevation_provider:
 		_elevation_provider = get_node_or_null("/root/TiledElevationProvider")
 	if not _elevation_provider:
-		# Fallback to creating a tiled provider
+		# Create a new TiledElevationProvider as fallback
 		_elevation_provider = TiledElevationProviderScript.new()
 		_elevation_provider.name = "TiledElevationProvider"
 		add_child(_elevation_provider)
@@ -135,6 +136,9 @@ func load_chunk(chunk_coord: Vector2i) -> TerrainChunk:
 
 	# Generate heightmap
 	_generate_heightmap(chunk)
+	
+	# Apply procedural detail enhancement
+	_apply_procedural_detail(chunk)
 
 	# Generate biome map
 	_generate_biome_map(chunk)
@@ -252,8 +256,9 @@ func get_chunk_count() -> int:
 	return _chunk_grid.size()
 
 
-## Generate heightmap for a chunk using ElevationDataProvider
+## Generate heightmap for a chunk using TiledElevationProvider
 ##
+## Requirements 9.1: Use unified elevation data source for all terrain
 ## @param chunk: TerrainChunk to generate heightmap for
 func _generate_heightmap(chunk: TerrainChunk) -> void:
 	if not _elevation_provider:
@@ -268,18 +273,126 @@ func _generate_heightmap(chunk: TerrainChunk) -> void:
 		push_error("ChunkManager: Failed to generate heightmap for chunk %s" % chunk.chunk_coord)
 		return
 	
-	# Debug: Check heightmap variation
+	# Log heightmap statistics for debugging (Requirements 1.4)
 	var min_val = 1.0
 	var max_val = 0.0
+	var total = 0.0
+	var count = 0
 	for y in range(chunk.base_heightmap.get_height()):
 		for x in range(chunk.base_heightmap.get_width()):
 			var val = chunk.base_heightmap.get_pixel(x, y).r
 			min_val = min(min_val, val)
 			max_val = max(max_val, val)
+			total += val
+			count += 1
 	
-	print("ChunkManager: Heightmap for chunk %s - min: %.3f, max: %.3f, range: %.3f" % [
-		chunk.chunk_coord, min_val, max_val, max_val - min_val
-	])
+	var mean_val = total / float(count) if count > 0 else 0.0
+	var range_val = max_val - min_val
+	
+	if _logger:
+		_logger.log_info(
+			"ChunkManager",
+			"Generated heightmap",
+			{
+				"chunk": str(chunk.chunk_coord),
+				"resolution": str(resolution),
+				"min": "%.4f" % min_val,
+				"max": "%.4f" % max_val,
+				"range": "%.4f" % range_val,
+				"mean": "%.4f" % mean_val
+			}
+		)
+	else:
+		print("ChunkManager: Heightmap for chunk %s - min: %.4f, max: %.4f, range: %.4f, mean: %.4f" % [
+			chunk.chunk_coord, min_val, max_val, range_val, mean_val
+		])
+
+
+## Apply procedural detail enhancement to heightmap
+##
+## Uses ProceduralDetailGenerator to enhance flat terrain with procedural features.
+## The detail generator handles flat terrain detection and applies appropriate
+## enhancement automatically.
+##
+## @param chunk: TerrainChunk to enhance
+func _apply_procedural_detail(chunk: TerrainChunk) -> void:
+	if not chunk.base_heightmap:
+		return
+	
+	# Find procedural detail generator
+	var detail_generator = get_node_or_null("../ProceduralDetailGenerator")
+	if not detail_generator:
+		if _logger:
+			_logger.log_warning("ChunkManager", "ProceduralDetailGenerator not found", {"chunk": chunk.chunk_coord})
+		return
+	
+	# Check if detail is enabled in terrain renderer
+	var terrain_renderer = get_node_or_null("..")
+	if terrain_renderer and "enable_procedural_detail" in terrain_renderer:
+		if not terrain_renderer.enable_procedural_detail:
+			return
+	
+	# Log heightmap statistics before enhancement
+	var stats_before = detail_generator.get_heightmap_stats(chunk.base_heightmap)
+	if _logger:
+		_logger.log_info(
+			"ChunkManager",
+			"Heightmap stats before detail",
+			{
+				"chunk": str(chunk.chunk_coord),
+				"min": "%.4f" % stats_before.min_value,
+				"max": "%.4f" % stats_before.max_value,
+				"range": "%.4f" % stats_before.range,
+				"is_flat": str(stats_before.is_flat)
+			}
+		)
+	else:
+		print("ChunkManager: Chunk %s before detail - min: %.4f, max: %.4f, range: %.4f, flat: %s" % [
+			chunk.chunk_coord, stats_before.min_value, stats_before.max_value, 
+			stats_before.range, str(stats_before.is_flat)
+		])
+	
+	# Generate enhanced heightmap with procedural detail
+	# The detail generator handles:
+	# - Flat terrain detection and aggressive enhancement
+	# - World-space noise coordinates for boundary consistency
+	# - Proper detail contribution (50% by default)
+	var enhanced_heightmap = detail_generator.generate_detail(
+		chunk.base_heightmap,
+		chunk.chunk_coord,
+		chunk_size
+	)
+	
+	if not enhanced_heightmap:
+		if _logger:
+			_logger.log_warning("ChunkManager", "Failed to generate detail heightmap", {"chunk": chunk.chunk_coord})
+		return
+	
+	# Replace base heightmap with enhanced version
+	# The detail generator already applies the detail contribution and returns
+	# the final enhanced heightmap, so we use it directly
+	chunk.base_heightmap = enhanced_heightmap
+	
+	# Log heightmap statistics after enhancement
+	var stats_after = detail_generator.get_heightmap_stats(chunk.base_heightmap)
+	if _logger:
+		_logger.log_info(
+			"ChunkManager",
+			"Heightmap stats after detail",
+			{
+				"chunk": str(chunk.chunk_coord),
+				"min": "%.4f" % stats_after.min_value,
+				"max": "%.4f" % stats_after.max_value,
+				"range": "%.4f" % stats_after.range,
+				"improvement": "%.2fx" % (stats_after.range / max(stats_before.range, 0.0001))
+			}
+		)
+	else:
+		var improvement = stats_after.range / max(stats_before.range, 0.0001)
+		print("ChunkManager: Chunk %s after detail - min: %.4f, max: %.4f, range: %.4f (%.2fx improvement)" % [
+			chunk.chunk_coord, stats_after.min_value, stats_after.max_value, 
+			stats_after.range, improvement
+		])
 
 
 ## Generate biome map for a chunk

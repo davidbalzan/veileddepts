@@ -21,6 +21,7 @@
 [ext_resource type="Script" path="res://scripts/views/whole_map_view.gd" id="18_whole_map_view"]
 [ext_resource type="Script" path="res://scripts/rendering/submarine_wake.gd" id="19_submarine_wake"]
 [ext_resource type="Script" path="res://scripts/ui/dev_console.gd" id="20_dev_console"]
+[ext_resource type="Script" path="res://scripts/debug/terrain_calibration_panel.gd" id="21_terrain_calibration"]
 
 [sub_resource type="Environment" id="Environment_eb6dy"]
 background_mode = 1
@@ -119,7 +120,7 @@ wind_direction_degrees = 45.0
 choppiness = 1.5
 fft_resolution_index = 1
 lod_level = 6
-quad_size = 16384.0
+quad_size = 4096.0
 
 [node name="TerrainRenderer" type="Node3D" parent="." groups=["terrain_renderer"]]
 script = ExtResource("14_terrain_renderer")
@@ -161,6 +162,9 @@ script = ExtResource("10_ocean_debug_ui")
 
 [node name="SubmarineTuningPanel" type="CanvasLayer" parent="."]
 script = ExtResource("17_tuning_panel")
+
+[node name="TerrainCalibrationPanel" type="CanvasLayer" parent="."]
+script = ExtResource("21_terrain_calibration")
 
 [node name="DevConsole" type="CanvasLayer" parent="."]
 layer = 10

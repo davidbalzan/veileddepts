@@ -14,12 +14,13 @@ var water_density: float = 1025.0  # Seawater density (kg/m³)
 var submarine_volume: float = 8000.0  # Displacement volume (m³)
 var buoyancy_coefficient: float = 1.0  # Neutral buoyancy factor
 var wave_influence_depth: float = 10.0  # Depth where wave influence fades (m)
-var wave_spring_coefficient: float = 50000.0  # Spring force to follow waves (N/m)
-var wave_damping_coefficient: float = 10000.0  # Damping for wave following (N·s/m)
+var wave_spring_coefficient: float = 80000.0  # Spring force to follow waves (N/m) - increased for surface riding
+var wave_damping_coefficient: float = 25000.0  # Damping for wave following (N·s/m) - increased to prevent bouncing
 var wave_torque_coefficient: float = 500000.0  # Wave-induced roll/pitch torque (N·m)
 var deep_stabilization_coefficient: float = 5000.0  # Vertical stabilization when deep (N·s/m)
 var hull_height: float = 10.0  # Submarine hull height for submersion calculation (m)
-var surface_threshold: float = 1.0  # Depth below which submarine is considered at surface (m)
+var surface_threshold: float = 2.0  # Depth below which submarine is considered at surface (m)
+var surface_riding_boost: float = 1.3  # Extra buoyancy when riding at surface (1.3 = 30% extra)
 
 
 func _init(config: Dictionary = {}):
@@ -43,6 +44,8 @@ func _init(config: Dictionary = {}):
 		hull_height = config.hull_height
 	if config.has("surface_threshold"):
 		surface_threshold = config.surface_threshold
+	if config.has("surface_riding_boost"):
+		surface_riding_boost = config.surface_riding_boost
 
 
 ## Calculate buoyancy force and wave interaction
@@ -84,8 +87,16 @@ func calculate_buoyancy_force(
 		water_density * submarine_volume * submersion_ratio * 9.81 * buoyancy_coefficient
 	)
 
+	# Apply surface riding boost when submarine wants to stay at surface
+	# This helps the submarine ride waves instead of sinking back down
+	if target_depth < surface_threshold and hull_depth < surface_threshold * 2:
+		buoyancy_force *= surface_riding_boost
+		# Also apply upward velocity damping to prevent flying over waves
+		if velocity.y > 0.5:
+			result.force.y -= velocity.y * wave_damping_coefficient * 0.5
+
 	# Buoyancy acts upward (positive Y)
-	result.force.y = buoyancy_force
+	result.force.y += buoyancy_force
 
 	# Requirement 9.4: Calculate wave influence factor (fades with depth >10m)
 	var wave_influence: float = _calculate_wave_influence(hull_depth)
@@ -230,3 +241,5 @@ func configure(config: Dictionary) -> void:
 		hull_height = config.hull_height
 	if config.has("surface_threshold"):
 		surface_threshold = config.surface_threshold
+	if config.has("surface_riding_boost"):
+		surface_riding_boost = config.surface_riding_boost
