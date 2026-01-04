@@ -237,12 +237,12 @@ func _create_debug_panel() -> void:
 	sea_level_value.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
 	vbox.add_child(sea_level_value)
 	
-	# Sea level slider - narrower range for finer control around realistic values
+	# Sea level slider - tight range around 0.954 for ±2m fine-tuning
 	_sea_level_slider = HSlider.new()
 	_sea_level_slider.name = "SeaLevelSlider"
-	_sea_level_slider.min_value = 0.85
-	_sea_level_slider.max_value = 1.0
-	_sea_level_slider.step = 0.0001  # Finer steps (0.01% increments)
+	_sea_level_slider.min_value = 0.9530  # About 2m below 0.954
+	_sea_level_slider.max_value = 0.9550  # About 2m above 0.954
+	_sea_level_slider.step = 0.00001  # About 0.2m increments
 	_sea_level_slider.value = current_normalized
 	_sea_level_slider.custom_minimum_size = Vector2(280, 20)
 	_sea_level_slider.value_changed.connect(_on_sea_level_changed)
