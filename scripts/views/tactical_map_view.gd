@@ -854,15 +854,10 @@ func _generate_terrain_texture_async() -> void:
 		terrain_world_size
 	)
 	
-	# Calculate meters per pixel for LOD selection
-	var meters_per_pixel = terrain_world_size / 512.0
-	
-	# Get target LOD
+	# Use the target LOD directly (don't recalculate, as it causes infinite loops)
 	var lod_level = _target_lod
-	if elevation_provider.has_method("get_lod_for_zoom"):
-		lod_level = elevation_provider.get_lod_for_zoom(meters_per_pixel)
 	
-	print("TacticalMapView: Async loading terrain at LOD %d..." % lod_level)
+	print("TacticalMapView: Async loading terrain at LOD %d (target)..." % lod_level)
 	
 	# Extract elevation data at target LOD
 	var elevation_image: Image = null
@@ -941,6 +936,10 @@ func _generate_terrain_texture_async() -> void:
 	terrain_texture = ImageTexture.create_from_image(terrain_image)
 	_current_lod = lod_level
 	_loading_higher_detail = false
+	
+	# Update tracking variables to prevent immediate regeneration
+	_last_generated_zoom = map_zoom
+	_last_generated_pos = simulation_state.submarine_position
 	
 	print("TacticalMapView: Async terrain load complete at LOD %d" % lod_level)
 
