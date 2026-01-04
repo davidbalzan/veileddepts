@@ -304,10 +304,10 @@ func _ensure_chunk_rendered(chunk: TerrainChunk) -> void:
 	if chunk.mesh_instance != null and chunk.lod_meshes.size() > 0:
 		return
 
-	# Generate procedural detail
-	var camera_distance = camera.global_position.distance_to(chunk.global_position)
+	# Generate procedural detail (new signature without submarine_distance)
+	var chunk_size_meters = 512.0
 	chunk.detail_heightmap = procedural_detail.generate_detail(
-		chunk.base_heightmap, chunk.chunk_coord, camera_distance
+		chunk.base_heightmap, chunk.chunk_coord, chunk_size_meters
 	)
 
 	# Detect biomes

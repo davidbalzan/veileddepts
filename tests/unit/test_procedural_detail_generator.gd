@@ -1,8 +1,6 @@
 extends GutTest
 ## Unit tests for ProceduralDetailGenerator
 
-const ProceduralDetailGenerator = preload("res://scripts/rendering/procedural_detail_generator.gd")
-
 var generator: ProceduralDetailGenerator
 
 
@@ -16,34 +14,49 @@ func test_initialization():
 	"""Test that generator initializes correctly"""
 	assert_not_null(generator, "Generator should be created")
 	assert_gt(generator.detail_scale, 0.0, "Detail scale should be positive")
-	assert_gt(generator.distance_falloff, 0.0, "Distance falloff should be positive")
+	assert_eq(generator.detail_scale, 30.0, "Detail scale should be 30.0 meters")
+	assert_eq(generator.detail_contribution, 0.5, "Detail contribution should be 50%")
+	assert_eq(generator.flat_terrain_threshold, 0.05, "Flat terrain threshold should be 0.05")
+	assert_eq(generator.flat_terrain_amplitude, 35.0, "Flat terrain amplitude should be 35.0 meters")
 
 
-func test_amplitude_calculation():
-	"""Test that amplitude decreases with distance"""
-	var amp_0 = generator.calculate_amplitude(0.0)
-	var amp_50 = generator.calculate_amplitude(50.0)
-	var amp_100 = generator.calculate_amplitude(100.0)
-	var amp_200 = generator.calculate_amplitude(200.0)
+func test_get_heightmap_stats_basic():
+	"""Test heightmap statistics calculation"""
+	var heightmap = Image.create(16, 16, false, Image.FORMAT_RF)
+	
+	# Fill with values from 0.2 to 0.8
+	for y in range(16):
+		for x in range(16):
+			var value = 0.2 + (float(x + y) / 30.0) * 0.6
+			heightmap.set_pixel(x, y, Color(value, 0, 0, 1))
+	
+	var stats = generator.get_heightmap_stats(heightmap)
+	
+	assert_almost_eq(stats.min_value, 0.2, 0.01, "Min value should be ~0.2")
+	assert_almost_eq(stats.max_value, 0.8, 0.01, "Max value should be ~0.8")
+	assert_almost_eq(stats.range, 0.6, 0.02, "Range should be ~0.6")
+	assert_false(stats.is_flat, "Terrain with 60% range should not be flat")
 
-	# Amplitude should decrease with distance
-	assert_gt(amp_0, amp_50, "Amplitude at 0m should be greater than at 50m")
-	assert_gt(amp_50, amp_100, "Amplitude at 50m should be greater than at 100m")
-	assert_gt(amp_100, amp_200, "Amplitude at 100m should be greater than at 200m")
 
-	# At distance 0, amplitude should equal detail_scale
-	assert_almost_eq(
-		amp_0, generator.detail_scale, 0.001, "Amplitude at distance 0 should equal detail_scale"
-	)
-
-	# At distance_falloff, amplitude should be half of detail_scale
-	var amp_falloff = generator.calculate_amplitude(generator.distance_falloff)
-	assert_almost_eq(
-		amp_falloff,
-		generator.detail_scale * 0.5,
-		0.001,
-		"Amplitude at distance_falloff should be half of detail_scale"
-	)
+func test_is_flat_terrain_detection():
+	"""Test flat terrain detection"""
+	# Create a flat heightmap (< 5% variation)
+	var flat_map = Image.create(16, 16, false, Image.FORMAT_RF)
+	for y in range(16):
+		for x in range(16):
+			var value = 0.5 + (float(x) / 16.0) * 0.03  # Only 3% variation
+			flat_map.set_pixel(x, y, Color(value, 0, 0, 1))
+	
+	assert_true(generator.is_flat_terrain(flat_map), "Terrain with 3% variation should be flat")
+	
+	# Create a varied heightmap (> 5% variation)
+	var varied_map = Image.create(16, 16, false, Image.FORMAT_RF)
+	for y in range(16):
+		for x in range(16):
+			var value = 0.3 + (float(x) / 16.0) * 0.4  # 40% variation
+			varied_map.set_pixel(x, y, Color(value, 0, 0, 1))
+	
+	assert_false(generator.is_flat_terrain(varied_map), "Terrain with 40% variation should not be flat")
 
 
 func test_generate_detail_basic():
@@ -57,10 +70,10 @@ func test_generate_detail_basic():
 			var height = float(y) / 32.0
 			base_map.set_pixel(x, y, Color(height, 0, 0, 1))
 
-	# Generate detail
+	# Generate detail with new signature (no submarine_distance)
 	var chunk_coord = Vector2i(0, 0)
-	var submarine_distance = 50.0
-	var detail_map = generator.generate_detail(base_map, chunk_coord, submarine_distance)
+	var chunk_size_meters = 512.0
+	var detail_map = generator.generate_detail(base_map, chunk_coord, chunk_size_meters)
 
 	assert_not_null(detail_map, "Detail map should be generated")
 	assert_eq(detail_map.get_width(), 32, "Detail map width should match base")
@@ -77,8 +90,8 @@ func test_generate_detail_follows_base():
 			var height = float(y) / 32.0  # Increases from 0 to 1 along Y
 			base_map.set_pixel(x, y, Color(height, 0, 0, 1))
 
-	# Generate detail at close range (high detail)
-	var detail_map = generator.generate_detail(base_map, Vector2i(0, 0), 10.0)
+	# Generate detail
+	var detail_map = generator.generate_detail(base_map, Vector2i(0, 0), 512.0)
 
 	# Check that general trend is preserved
 	# Bottom row should still be lower than top row on average
@@ -98,11 +111,8 @@ func test_generate_detail_follows_base():
 func test_generate_detail_with_null_input():
 	"""Test that null input is handled gracefully"""
 	# This test verifies error handling - errors are expected
-	# Skip assertion on errors since push_error is expected behavior
-	var detail_map = generator.generate_detail(null, Vector2i(0, 0), 50.0)
+	var detail_map = generator.generate_detail(null, Vector2i(0, 0), 512.0)
 	assert_null(detail_map, "Should return null for null input")
-	# Clear any logged errors since they're expected
-	gut.get_logger().get_errors().clear()
 
 
 func test_generate_detail_consistency():
@@ -116,8 +126,8 @@ func test_generate_detail_consistency():
 
 	# Generate detail twice with same chunk coordinates
 	var chunk_coord = Vector2i(5, 7)
-	var detail_map1 = generator.generate_detail(base_map, chunk_coord, 50.0)
-	var detail_map2 = generator.generate_detail(base_map, chunk_coord, 50.0)
+	var detail_map1 = generator.generate_detail(base_map, chunk_coord, 512.0)
+	var detail_map2 = generator.generate_detail(base_map, chunk_coord, 512.0)
 
 	# Sample a few pixels and verify they match
 	for i in range(5):
@@ -131,6 +141,29 @@ func test_generate_detail_consistency():
 			0.0001,
 			"Same chunk coordinates should produce identical detail at (%d, %d)" % [x, y]
 		)
+
+
+func test_flat_terrain_gets_enhanced():
+	"""Test that flat terrain receives aggressive enhancement"""
+	# Create a very flat heightmap (< 5% variation)
+	var flat_map = Image.create(32, 32, false, Image.FORMAT_RF)
+	for y in range(32):
+		for x in range(32):
+			var value = 0.5 + (float(x) / 32.0) * 0.02  # Only 2% variation
+			flat_map.set_pixel(x, y, Color(value, 0, 0, 1))
+	
+	# Verify it's detected as flat
+	assert_true(generator.is_flat_terrain(flat_map), "Test map should be detected as flat")
+	
+	# Generate detail
+	var detail_map = generator.generate_detail(flat_map, Vector2i(0, 0), 512.0)
+	
+	# The output should have more variation than the input
+	var input_stats = generator.get_heightmap_stats(flat_map)
+	var output_stats = generator.get_heightmap_stats(detail_map)
+	
+	assert_gt(output_stats.range, input_stats.range, 
+		"Enhanced flat terrain should have more variation than input")
 
 
 func test_generate_bump_map_basic():
@@ -180,12 +213,8 @@ func test_bump_map_contains_valid_normals():
 
 func test_bump_map_with_null_input():
 	"""Test that null input is handled gracefully"""
-	# This test verifies error handling - errors are expected
-	# Skip assertion on errors since push_error is expected behavior
 	var bump_map = generator.generate_bump_map(null, Vector2i(0, 0))
 	assert_null(bump_map, "Should return null for null input")
-	# Clear any logged errors since they're expected
-	gut.get_logger().get_errors().clear()
 
 
 func test_bump_map_flat_surface():
@@ -215,7 +244,7 @@ func test_boundary_consistency_horizontal():
 	
 	This verifies that the same world position generates the same noise
 	value regardless of which chunk it's generated from.
-	Requirements: 10.4
+	Requirements: 6.1, 6.2
 	"""
 	var chunk_size_meters = 512.0  # Match ChunkManager default
 	var chunk_size_pixels = 32
@@ -230,11 +259,11 @@ func test_boundary_consistency_horizontal():
 			base_map1.set_pixel(x, y, Color(0.5, 0, 0, 1))
 			base_map2.set_pixel(x, y, Color(0.5, 0, 0, 1))
 
-	# Generate detail for both chunks
+	# Generate detail for both chunks (new signature without submarine_distance)
 	var chunk_coord1 = Vector2i(0, 0)
 	var chunk_coord2 = Vector2i(1, 0)
-	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, 50.0, chunk_size_meters)
-	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, 50.0, chunk_size_meters)
+	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, chunk_size_meters)
+	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, chunk_size_meters)
 
 	# The right edge of chunk1 should match the left edge of chunk2
 	# because they represent the same world positions
@@ -255,7 +284,7 @@ func test_boundary_consistency_vertical():
 	
 	This verifies that the same world position generates the same noise
 	value regardless of which chunk it's generated from.
-	Requirements: 10.4
+	Requirements: 6.1, 6.2
 	"""
 	var chunk_size_meters = 512.0  # Match ChunkManager default
 	var chunk_size_pixels = 32
@@ -273,8 +302,8 @@ func test_boundary_consistency_vertical():
 	# Generate detail for both chunks
 	var chunk_coord1 = Vector2i(0, 0)
 	var chunk_coord2 = Vector2i(0, 1)
-	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, 50.0, chunk_size_meters)
-	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, 50.0, chunk_size_meters)
+	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, chunk_size_meters)
+	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, chunk_size_meters)
 
 	# The bottom edge of chunk1 should match the top edge of chunk2
 	# because they represent the same world positions
@@ -294,7 +323,7 @@ func test_boundary_consistency_diagonal():
 	"""Test that procedural detail matches at diagonal chunk corners
 	
 	This verifies consistency at the corner where four chunks meet.
-	Requirements: 10.4
+	Requirements: 6.1, 6.2
 	"""
 	var chunk_size_meters = 512.0  # Match ChunkManager default
 	var chunk_size_pixels = 32
@@ -308,11 +337,11 @@ func test_boundary_consistency_diagonal():
 			base_map.set_pixel(x, y, Color(0.5, 0, 0, 1))
 
 	# Generate detail for all four chunks
-	var chunk_coords = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]  # Bottom-left  # Bottom-right  # Top-left  # Top-right
+	var chunk_coords = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]
 
 	var detail_maps = []
 	for coord in chunk_coords:
-		var detail = generator.generate_detail(base_map, coord, 50.0, chunk_size_meters)
+		var detail = generator.generate_detail(base_map, coord, chunk_size_meters)
 		detail_maps.append(detail)
 
 	# Check that the corner values all match
@@ -335,7 +364,7 @@ func test_boundary_consistency_with_varying_base():
 	
 	This ensures that even when the base terrain is different,
 	the procedural detail component remains consistent at boundaries.
-	Requirements: 10.4
+	Requirements: 6.1, 6.2
 	"""
 	var chunk_size_meters = 512.0  # Match ChunkManager default
 	var chunk_size_pixels = 32
@@ -359,8 +388,8 @@ func test_boundary_consistency_with_varying_base():
 	# Generate detail for both chunks
 	var chunk_coord1 = Vector2i(0, 0)
 	var chunk_coord2 = Vector2i(1, 0)
-	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, 50.0, chunk_size_meters)
-	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, 50.0, chunk_size_meters)
+	var detail_map1 = generator.generate_detail(base_map1, chunk_coord1, chunk_size_meters)
+	var detail_map2 = generator.generate_detail(base_map2, chunk_coord2, chunk_size_meters)
 
 	# Extract the procedural detail component by subtracting base
 	# At the boundary, the detail component should match

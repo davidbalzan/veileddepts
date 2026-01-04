@@ -382,10 +382,10 @@ func _test_procedural_detail() -> void:
 		print("  ✗ No chunk or heightmap available")
 		return
 
-	# Generate procedural detail at close distance
-	var close_distance = 50.0
+	# Generate procedural detail (new signature without submarine_distance)
+	var chunk_size_meters = 512.0
 	var detail_heightmap = procedural_detail.generate_detail(
-		chunk.base_heightmap, chunk.chunk_coord, close_distance
+		chunk.base_heightmap, chunk.chunk_coord, chunk_size_meters
 	)
 
 	if not detail_heightmap:

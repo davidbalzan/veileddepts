@@ -10,13 +10,13 @@ extends RefCounted
 ## Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 14.4
 
 # Configuration parameters
-var torque_coefficient: float = 2000000.0  # Base torque multiplier (N·m)
+var torque_coefficient: float = 250000.0  # Base torque multiplier (N·m) - reduced from 2M for realistic turning
 var max_rudder_angle: float = 30.0  # Maximum rudder deflection (degrees)
-var max_turn_rate: float = 5.0  # Maximum angular velocity (degrees/second)
+var max_turn_rate: float = 3.0  # Maximum angular velocity (degrees/second) - submarines turn slowly
 var min_steering_speed: float = 0.5  # Minimum speed for effective steering (m/s)
 var max_steering_speed: float = 8.0  # Speed cap for steering effectiveness (m/s)
 var low_speed_effectiveness: float = 0.2  # Effectiveness multiplier below min_steering_speed (20%)
-var stability_damping_coefficient: float = 50000.0  # Damping torque coefficient
+var stability_damping_coefficient: float = 100000.0  # Damping torque coefficient - increased for stability
 
 # Debug mode (Requirement 14.1, 14.4)
 var debug_mode: bool = false

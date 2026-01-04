@@ -2,17 +2,21 @@ class_name ProceduralDetailGenerator extends Node
 ## Generates fine-scale terrain detail that follows base elevation
 ##
 ## This class generates procedural detail using multi-octave noise,
-## modulated by slope, curvature, and distance from the submarine.
+## modulated by slope, curvature, and terrain characteristics.
 ## Detail characteristics change based on terrain features:
 ## - Steep slopes get rocky detail
-## - Flat areas get sediment detail
-## - Detail amplitude decreases with distance
+## - Flat areas get enhanced detail to ensure visibility
+## - Uses world-space coordinates for seamless chunk boundaries
 
-# Detail configuration
-@export var detail_scale: float = 2.0  # meters - base amplitude of detail
-@export var detail_frequency: float = 0.05  # noise frequency
-@export var detail_octaves: int = 3  # number of noise octaves
-@export var distance_falloff: float = 100.0  # meters - distance at which detail is halved
+# Detail configuration (MODIFIED VALUES for terrain visibility)
+@export var detail_scale: float = 30.0  # meters - base amplitude of detail (was 2.0)
+@export var detail_frequency: float = 0.02  # Lower frequency for larger features (was 0.05)
+@export var detail_octaves: int = 4  # More octaves for natural variation (was 3)
+@export var detail_contribution: float = 0.5  # 50% contribution (was implicit 0.1)
+
+# Flat terrain enhancement parameters
+@export var flat_terrain_threshold: float = 0.05  # 5% variation threshold
+@export var flat_terrain_amplitude: float = 35.0  # 20-50m range, use 35m for flat areas
 
 # Slope thresholds for detail characteristics
 @export var steep_slope_threshold: float = 0.6  # radians - above this is "rocky"
@@ -37,21 +41,79 @@ func _initialize_noise() -> void:
 	_noise.fractal_gain = 0.5
 
 
+## Check if heightmap is flat (needs enhancement)
+##
+## A heightmap is considered flat if its value range is less than
+## the flat_terrain_threshold (default 5%).
+##
+## @param heightmap: Heightmap image (FORMAT_RF with values 0-1)
+## @return: True if terrain is flat and needs enhancement
+func is_flat_terrain(heightmap: Image) -> bool:
+	if not heightmap:
+		return false
+	
+	var stats: Dictionary = get_heightmap_stats(heightmap)
+	return stats.range < flat_terrain_threshold
+
+
+## Get heightmap statistics for debugging and flat terrain detection
+##
+## Calculates min, max, range, and mean values from the heightmap.
+##
+## @param heightmap: Heightmap image (FORMAT_RF with values 0-1)
+## @return: Dictionary with min_value, max_value, range, mean, is_flat
+func get_heightmap_stats(heightmap: Image) -> Dictionary:
+	var result: Dictionary = {
+		"min_value": 1.0,
+		"max_value": 0.0,
+		"range": 0.0,
+		"mean": 0.0,
+		"is_flat": true
+	}
+	
+	if not heightmap:
+		return result
+	
+	var width: int = heightmap.get_width()
+	var height: int = heightmap.get_height()
+	var total: float = 0.0
+	var count: int = 0
+	
+	for y in range(height):
+		for x in range(width):
+			var value: float = heightmap.get_pixel(x, y).r
+			result.min_value = min(result.min_value, value)
+			result.max_value = max(result.max_value, value)
+			total += value
+			count += 1
+	
+	if count > 0:
+		result.mean = total / float(count)
+	
+	result.range = result.max_value - result.min_value
+	result.is_flat = result.range < flat_terrain_threshold
+	
+	return result
+
+
+
 ## Generate detail heightmap for a chunk
 ##
 ## Creates procedural detail that follows the base elevation data,
-## modulated by slope, curvature, and distance from submarine.
+## modulated by slope and curvature. Uses world-space coordinates
+## for seamless chunk boundaries.
+##
+## MODIFIED: Removed submarine_distance parameter - uses world-space coordinates
+## for consistent detail regardless of submarine position.
 ##
 ## @param base_heightmap: Base elevation data (Image with FORMAT_RF)
-## @param chunk_coord: Chunk coordinates (used as noise seed for consistency)
-## @param submarine_distance: Distance from submarine to chunk center (meters)
-## @param chunk_size_meters: Size of the chunk in meters (default 512.0)
+## @param chunk_coord: Chunk coordinates (used for world-space positioning)
+## @param chunk_size_meters: Size of the chunk in meters
 ## @return: Detail heightmap (Image with FORMAT_RF) or null on error
 func generate_detail(
 	base_heightmap: Image,
 	chunk_coord: Vector2i,
-	submarine_distance: float,
-	chunk_size_meters: float = 512.0
+	chunk_size_meters: float
 ) -> Image:
 	if not base_heightmap:
 		push_error("ProceduralDetailGenerator: base_heightmap is null")
@@ -66,8 +128,14 @@ func generate_detail(
 	# Create detail heightmap with same format as base
 	var detail_map: Image = Image.create(width, height, false, Image.FORMAT_RF)
 
-	# Calculate base amplitude from distance
-	var base_amplitude: float = calculate_amplitude(submarine_distance)
+	# Check if terrain is flat and needs aggressive enhancement
+	var terrain_is_flat: bool = is_flat_terrain(base_heightmap)
+	var base_amplitude: float = detail_scale
+	
+	# Apply aggressive enhancement for flat terrain
+	if terrain_is_flat:
+		base_amplitude = flat_terrain_amplitude
+		print("ProceduralDetailGenerator: Flat terrain detected, using amplitude: ", base_amplitude)
 
 	# Calculate world-space position of chunk corner (bottom-left)
 	# This ensures that the same world position always generates the same noise value
@@ -110,8 +178,12 @@ func generate_detail(
 			# Calculate final detail amplitude
 			var amplitude: float = base_amplitude * slope_modulation * curvature_modulation
 
+			# Apply detail contribution factor (50% of total height range)
+			# The detail is added as a percentage of the amplitude
+			var detail_value: float = noise_value * amplitude * detail_contribution
+
 			# Apply detail to base elevation
-			var detail_elevation: float = base_elevation + (noise_value * amplitude)
+			var detail_elevation: float = base_elevation + detail_value
 
 			# Store in detail map
 			detail_map.set_pixel(x, y, Color(detail_elevation, 0, 0, 1))
@@ -125,9 +197,9 @@ func generate_detail(
 ## surface detail without adding geometry.
 ##
 ## @param base_heightmap: Base elevation data (Image with FORMAT_RF)
-## @param chunk_coord: Chunk coordinates (used for consistency)
+## @param _chunk_coord: Chunk coordinates (unused, kept for API consistency)
 ## @return: Bump map (Image with FORMAT_RGBA8) or null on error
-func generate_bump_map(base_heightmap: Image, chunk_coord: Vector2i) -> Image:
+func generate_bump_map(base_heightmap: Image, _chunk_coord: Vector2i) -> Image:
 	if not base_heightmap:
 		push_error("ProceduralDetailGenerator: base_heightmap is null")
 		return null
@@ -152,22 +224,6 @@ func generate_bump_map(base_heightmap: Image, chunk_coord: Vector2i) -> Image:
 			bump_map.set_pixel(x, y, normal_color)
 
 	return bump_map
-
-
-## Calculate detail amplitude based on distance from submarine
-##
-## Amplitude decreases exponentially with distance to maintain
-## performance and visual quality.
-##
-## @param distance: Distance from submarine in meters
-## @return: Amplitude multiplier (0.0 to 1.0)
-func calculate_amplitude(distance: float) -> float:
-	if distance <= 0.0:
-		return detail_scale
-
-	# Exponential falloff: amplitude = base * 2^(-distance / falloff_distance)
-	var falloff: float = pow(2.0, -distance / distance_falloff)
-	return detail_scale * falloff
 
 
 ## Calculate slope at a pixel using central differences

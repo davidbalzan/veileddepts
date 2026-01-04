@@ -135,6 +135,9 @@ func load_chunk(chunk_coord: Vector2i) -> TerrainChunk:
 
 	# Generate heightmap
 	_generate_heightmap(chunk)
+	
+	# Apply procedural detail enhancement
+	_apply_procedural_detail(chunk)
 
 	# Generate biome map
 	_generate_biome_map(chunk)
@@ -280,6 +283,50 @@ func _generate_heightmap(chunk: TerrainChunk) -> void:
 	print("ChunkManager: Heightmap for chunk %s - min: %.3f, max: %.3f, range: %.3f" % [
 		chunk.chunk_coord, min_val, max_val, max_val - min_val
 	])
+
+
+## Apply procedural detail enhancement to heightmap
+##
+## @param chunk: TerrainChunk to enhance
+func _apply_procedural_detail(chunk: TerrainChunk) -> void:
+	if not chunk.base_heightmap:
+		return
+	
+	# Find procedural detail generator
+	var detail_generator = get_node_or_null("../ProceduralDetailGenerator")
+	if not detail_generator:
+		return
+	
+	# Check if detail is enabled in terrain renderer
+	var terrain_renderer = get_node_or_null("..")
+	if terrain_renderer and "enable_procedural_detail" in terrain_renderer:
+		if not terrain_renderer.enable_procedural_detail:
+			return
+	
+	# Generate detail heightmap
+	var detail_heightmap = detail_generator.generate_detail(
+		chunk.base_heightmap,
+		chunk.chunk_coord,
+		chunk_size
+	)
+	
+	if not detail_heightmap:
+		return
+	
+	# Blend detail with base heightmap
+	var width = chunk.base_heightmap.get_width()
+	var height = chunk.base_heightmap.get_height()
+	
+	for y in range(height):
+		for x in range(width):
+			var base_val = chunk.base_heightmap.get_pixel(x, y).r
+			var detail_val = detail_heightmap.get_pixel(x, y).r
+			# Add detail to base (detail is centered around 0.5)
+			var enhanced_val = base_val + (detail_val - 0.5) * 0.1  # Scale detail contribution
+			enhanced_val = clamp(enhanced_val, 0.0, 1.0)
+			chunk.base_heightmap.set_pixel(x, y, Color(enhanced_val, enhanced_val, enhanced_val))
+	
+	print("ChunkManager: Applied procedural detail to chunk %s" % chunk.chunk_coord)
 
 
 ## Generate biome map for a chunk
