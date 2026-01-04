@@ -59,8 +59,8 @@ This implementation plan addresses critical terrain visibility issues and establ
   - Check console logs for heightmap statistics
   - Ask user to verify visual appearance
 
-- [ ] 4. Implement TiledElevationProvider
-  - [ ] 4.1 Create TiledElevationProvider class
+- [x] 4. Implement TiledElevationProvider
+  - [x] 4.1 Create TiledElevationProvider class
     - Create `scripts/rendering/tiled_elevation_provider.gd`
     - Implement tile index loading from JSON
     - Implement `extract_region()` with tile lookup
@@ -68,13 +68,13 @@ This implementation plan addresses critical terrain visibility issues and establ
     - Implement fallback to source image when tiles unavailable
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 4.2 Implement multi-resolution LOD support
+  - [x] 4.2 Implement multi-resolution LOD support
     - Add `extract_region_lod()` for zoom-based detail
     - Add `get_lod_for_zoom()` to select appropriate LOD
     - Support 4 LOD levels (full, 1/2, 1/4, 1/8 resolution)
     - _Requirements: 8.5_
 
-  - [ ] 4.3 Implement LOD cache for fast map loading
+  - [x] 4.3 Implement LOD cache for fast map loading
     - Add `LODCache` class with world overview pre-loading
     - Add tile cache with LRU eviction
     - Pre-load tiles around spawn point at startup
@@ -84,28 +84,28 @@ This implementation plan addresses critical terrain visibility issues and establ
     - **Property 9: Tile Index O(1) Lookup**
     - **Validates: Requirements 8.4**
 
-- [ ] 5. Create Tile Processing Tool
-  - [ ] 5.1 Create heightmap tile processor script
+- [x] 5. Create Tile Processing Tool
+  - [x] 5.1 Create heightmap tile processor script
     - Create `tools/heightmap_tile_processor.gd`
     - Split source image into tiles at multiple LOD levels
     - Generate `tile_index.json` with metadata
     - Support command-line execution
     - _Requirements: 8.1_
 
-  - [ ] 5.2 Process world elevation map into tiles
+  - [x] 5.2 Process world elevation map into tiles
     - Run tile processor on `src_assets/World_elevation_map.png`
     - Generate tiles in `assets/terrain/tiles/` directory
     - Verify tile index is correct
     - _Requirements: 8.1_
 
-- [ ] 6. Integrate TiledElevationProvider
-  - [ ] 6.1 Update ChunkManager to use TiledElevationProvider
+- [x] 6. Integrate TiledElevationProvider
+  - [x] 6.1 Update ChunkManager to use TiledElevationProvider
     - Modify `scripts/rendering/chunk_manager.gd`
     - Replace ElevationDataProvider with TiledElevationProvider
     - Update `_generate_heightmap()` to use new provider
     - _Requirements: 9.1_
 
-  - [ ] 6.2 Update tactical map to use TiledElevationProvider
+  - [x] 6.2 Update tactical map to use TiledElevationProvider
     - Modify `scripts/views/tactical_map_view.gd`
     - Use `extract_region_lod()` for zoom-based detail
     - Implement progressive loading for smooth zooming
@@ -115,21 +115,21 @@ This implementation plan addresses critical terrain visibility issues and establ
     - **Property 10: Unified Elevation Data Consistency**
     - **Validates: Requirements 9.2, 9.3**
 
-- [ ] 7. Checkpoint - Verify Tiled Loading
+- [x] 7. Checkpoint - Verify Tiled Loading
   - Ensure tiles load correctly
   - Verify tactical map uses same data as terrain
   - Check LOD switching works on zoom
   - Ask user to verify performance
 
 - [ ] 8. Implement Calibration System
-  - [ ] 8.1 Add height calibration using reference points
+  - [x] 8.1 Add height calibration using reference points
     - Create `HeightCalibration` class
     - Scan heightmap for min/max pixel values
     - Map to Mariana Trench and Mount Everest
     - Store calibration data for runtime use
     - _Requirements: 7.4_
 
-  - [ ] 8.2 Add visual sea level calibration UI
+  - [x] 8.2 Add visual sea level calibration UI
     - Add "Sea Level Offset" slider to F3 debug panel (-50m to +50m)
     - Add "Save Calibration" button
     - Integrate with SeaLevelManager
@@ -153,7 +153,7 @@ This implementation plan addresses critical terrain visibility issues and establ
   - [ ] 10.1 Extend BiomeType enum
     - Add underwater biomes: DEEP_OCEAN, CONTINENTAL_SHELF, REEF_ZONE
     - Add coastal biomes: SANDY_BEACH, PEBBLE_BEACH, ROCKY_SHORE, TIDAL_FLAT
-    - Add land biomes: COASTAL_VEGETATION, DUNES, WETLAND
+    - Add land biomes: COASTAL_VEGETATION, DUNES, WETLAND, ICE
     - _Requirements: 5.1_
 
   - [ ] 10.2 Implement coastal biome detection algorithm

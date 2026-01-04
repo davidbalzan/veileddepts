@@ -70,6 +70,10 @@ func _setup_ocean() -> void:
 
 	ocean.initialize_simulation()
 	await get_tree().process_frame
+	
+	# Set default wave amplitude to 0.2 for calmer seas
+	ocean.amplitude_scale_max = 0.2
+	ocean.amplitude_scale_min = 0.05  # 25% of max for distant waves
 
 	quad_tree = QuadTree3D.new()
 	quad_tree.lod_level = lod_level

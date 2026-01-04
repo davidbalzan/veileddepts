@@ -17,7 +17,7 @@ const TiledElevationProviderScript = preload("res://scripts/rendering/tiled_elev
 # Internal state
 var _chunk_grid: Dictionary = {}  # Vector2i -> TerrainChunk
 var _chunk_coordinates: ChunkCoordinates = null
-var _elevation_provider = null  # TiledElevationProvider or ElevationDataProvider
+var _elevation_provider = null  # TiledElevationProvider (unified elevation data source)
 var _logger: TerrainLogger = null
 var _total_memory_bytes: int = 0
 var _lru_list: Array[Vector2i] = []  # Least recently used order
@@ -35,12 +35,13 @@ func _ready() -> void:
 		_logger.name = "TerrainLogger"
 		# Don't add as child, just use locally
 
-	# Find elevation provider from parent (TerrainRenderer) or create fallback
+	# Find TiledElevationProvider from parent (TerrainRenderer) or create one
+	# Requirements 9.1: Use unified elevation data source
 	_elevation_provider = get_node_or_null("../TiledElevationProvider")
 	if not _elevation_provider:
 		_elevation_provider = get_node_or_null("/root/TiledElevationProvider")
 	if not _elevation_provider:
-		# Fallback to creating a tiled provider
+		# Create a new TiledElevationProvider as fallback
 		_elevation_provider = TiledElevationProviderScript.new()
 		_elevation_provider.name = "TiledElevationProvider"
 		add_child(_elevation_provider)
@@ -255,8 +256,9 @@ func get_chunk_count() -> int:
 	return _chunk_grid.size()
 
 
-## Generate heightmap for a chunk using ElevationDataProvider
+## Generate heightmap for a chunk using TiledElevationProvider
 ##
+## Requirements 9.1: Use unified elevation data source for all terrain
 ## @param chunk: TerrainChunk to generate heightmap for
 func _generate_heightmap(chunk: TerrainChunk) -> void:
 	if not _elevation_provider:

@@ -224,7 +224,7 @@ func set_submarine(submarine: Node3D) -> void:
 		push_warning("TerrainRenderer: Submarine reference set to null")
 
 
-var _debug_frame_counter: int = 0
+var _last_chunk_count: int = 0  # Track chunk count to detect changes
 
 func _process(_delta: float) -> void:
 	if not initialized or not _streaming_manager or not _submarine:
@@ -236,13 +236,12 @@ func _process(_delta: float) -> void:
 	# Process incremental sea level updates
 	_process_sea_level_updates(_delta)
 
-	# Debug: Print chunk status every 120 frames (2 seconds at 60fps)
-	_debug_frame_counter += 1
-	if _debug_frame_counter >= 120:
-		_debug_frame_counter = 0
-		if _chunk_manager:
-			var chunk_count = _chunk_manager.get_chunk_count()
-			print("TerrainRenderer DEBUG: %d chunks loaded, sub at %s" % [chunk_count, _submarine.global_position])
+	# Debug: Print chunk status only when it changes
+	if _chunk_manager:
+		var current_chunk_count = _chunk_manager.get_chunk_count()
+		if current_chunk_count != _last_chunk_count:
+			print("TerrainRenderer: Chunk count changed: %d -> %d (sub at %s)" % [_last_chunk_count, current_chunk_count, _submarine.global_position])
+			_last_chunk_count = current_chunk_count
 
 
 ## Callback when sea level changes
