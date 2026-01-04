@@ -143,7 +143,7 @@ func _create_ui_elements() -> void:
 	title_inner.name = "WorldMapTitle"
 	title_inner.text = "WORLD MAP - CLICK TO SHIFT MISSION AREA AND TELEPORT"
 	title_inner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_inner.add_theme_font_size_override("font_size", 24)
+	title_inner.add_theme_font_size_override("font_size", 28)
 	title_inner.add_theme_color_override("font_color", Color(0, 1, 1, 1))
 	title_inner.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title_inner.position.y = 20
@@ -160,7 +160,7 @@ func _create_ui_elements() -> void:
 	var elev_label = Label.new()
 	elev_label.name = "ElevationInfo"
 	elev_label.position = Vector2(20, 120)
-	elev_label.add_theme_font_size_override("font_size", 18)
+	elev_label.add_theme_font_size_override("font_size", 20)
 	elev_label.add_theme_color_override("font_color", Color.WHITE)
 	add_child(elev_label)
 
@@ -212,7 +212,7 @@ func _create_debug_panel() -> void:
 	var title = Label.new()
 	title.text = "DEBUG CONTROLS"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(0, 1, 1, 1))
 	vbox.add_child(title)
 	
@@ -223,7 +223,7 @@ func _create_debug_panel() -> void:
 	# Sea Level Control Section
 	var sea_level_label = Label.new()
 	sea_level_label.text = "Sea Level Threshold (Visualization Only)"
-	sea_level_label.add_theme_font_size_override("font_size", 14)
+	sea_level_label.add_theme_font_size_override("font_size", 16)
 	sea_level_label.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(sea_level_label)
 	
@@ -233,16 +233,16 @@ func _create_debug_panel() -> void:
 	var current_normalized = SeaLevelManager.get_sea_level_normalized()
 	var current_meters = SeaLevelManager.get_sea_level_meters()
 	sea_level_value.text = "%.3f (%.0fm elevation, Default: 0.554)" % [current_normalized, current_meters]
-	sea_level_value.add_theme_font_size_override("font_size", 12)
+	sea_level_value.add_theme_font_size_override("font_size", 14)
 	sea_level_value.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
 	vbox.add_child(sea_level_value)
 	
-	# Sea level slider - tight range around 0.954 for ±2m fine-tuning
+	# Sea level slider
 	_sea_level_slider = HSlider.new()
 	_sea_level_slider.name = "SeaLevelSlider"
-	_sea_level_slider.min_value = 0.9530  # About 2m below 0.954
-	_sea_level_slider.max_value = 0.9550  # About 2m above 0.954
-	_sea_level_slider.step = 0.00001  # About 0.2m increments
+	_sea_level_slider.min_value = 0.0
+	_sea_level_slider.max_value = 1.0
+	_sea_level_slider.step = 0.001
 	_sea_level_slider.value = current_normalized
 	_sea_level_slider.custom_minimum_size = Vector2(280, 20)
 	_sea_level_slider.value_changed.connect(_on_sea_level_changed)
@@ -260,7 +260,7 @@ func _create_debug_panel() -> void:
 	_progress_label = Label.new()
 	_progress_label.name = "ProgressLabel"
 	_progress_label.text = ""
-	_progress_label.add_theme_font_size_override("font_size", 11)
+	_progress_label.add_theme_font_size_override("font_size", 13)
 	_progress_label.add_theme_color_override("font_color", Color(1, 1, 0, 1))
 	_progress_label.visible = false
 	vbox.add_child(_progress_label)
@@ -281,7 +281,7 @@ func _create_debug_panel() -> void:
 	# Debug Info Section
 	var debug_info_label = Label.new()
 	debug_info_label.text = "Map Information"
-	debug_info_label.add_theme_font_size_override("font_size", 14)
+	debug_info_label.add_theme_font_size_override("font_size", 16)
 	debug_info_label.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(debug_info_label)
 	
@@ -297,7 +297,7 @@ func _create_debug_panel() -> void:
 		]
 	else:
 		map_info.text = "Map: Not Loaded"
-	map_info.add_theme_font_size_override("font_size", 11)
+	map_info.add_theme_font_size_override("font_size", 13)
 	map_info.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
 	vbox.add_child(map_info)
 	
@@ -327,7 +327,7 @@ func _create_debug_panel() -> void:
 	# Instructions
 	var instructions = Label.new()
 	instructions.text = "F3: Toggle This Panel\nF4: Toggle All Debug"
-	instructions.add_theme_font_size_override("font_size", 10)
+	instructions.add_theme_font_size_override("font_size", 12)
 	instructions.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1))
 	instructions.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(instructions)

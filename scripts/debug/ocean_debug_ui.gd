@@ -234,6 +234,7 @@ func _create_ui() -> void:
 	_add_slider(vbox, "Max Height", 0.0, 500.0, init_max_h, _on_max_height_changed)
 	_add_slider(vbox, "Min Height", -1000.0, 0.0, init_min_h, _on_min_height_changed)
 	_add_slider(vbox, "Scale (X=Y)", 512.0, 8192.0, init_size, _on_terrain_scale_changed)
+	_add_checkbox(vbox, "Debug Terrain Colors", false, _on_terrain_debug_colors_changed)
 
 	vbox.add_child(HSeparator.new())
 
@@ -434,6 +435,15 @@ func _on_terrain_scale_changed(value: float) -> void:
 		var size_int = int(value)
 		terrain_renderer.terrain_size = Vector2i(size_int, size_int)
 		terrain_renderer.regenerate_terrain()
+
+
+func _on_terrain_debug_colors_changed(enabled: bool) -> void:
+	if terrain_renderer:
+		# Find the ChunkManager in the terrain renderer
+		var chunk_manager = terrain_renderer.get_node_or_null("ChunkManager")
+		if chunk_manager and chunk_manager.has_method("set_debug_color_mode"):
+			chunk_manager.set_debug_color_mode(enabled)
+			print("OceanDebugUI: Terrain debug colors ", "enabled" if enabled else "disabled")
 
 
 func _print_values() -> void:
