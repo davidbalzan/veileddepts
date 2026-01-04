@@ -369,7 +369,24 @@ func _on_ocean_visibility_changed(is_visible: bool) -> void:
 		# Also hide the quad_tree directly (the actual rendering mesh)
 		if ocean_renderer.quad_tree:
 			ocean_renderer.quad_tree.visible = is_visible
-		print("OceanDebugUI: Ocean visibility set to ", is_visible)
+
+	# Hide all sea-related elements
+	var main = get_tree().root.get_node_or_null("Main")
+	if main:
+		var sealife = main.get_node_or_null("SealifeRenderer")
+		if sealife:
+			sealife.visible = is_visible
+
+		var wake = main.get_node_or_null("SubmarineWake")
+		if wake:
+			wake.visible = is_visible
+
+		# Hide underwater particles if they exist
+		var particles = main.get_node_or_null("UnderwaterParticles")
+		if particles:
+			particles.visible = is_visible
+
+	print("OceanDebugUI: Ocean/sea visibility set to ", is_visible)
 
 
 func _on_atmosphere_visibility_changed(visible: bool) -> void:
