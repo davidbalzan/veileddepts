@@ -48,6 +48,9 @@ var thrust_arrow: Node3D = null
 var velocity_arrow: Node3D = null
 var target_arrow: Node3D = null
 
+## Seabed depth HUD
+var seabed_hud: SeabedDepthHUD = null
+
 
 func _ready() -> void:
 	# Find camera in scene tree
@@ -72,6 +75,11 @@ func _ready() -> void:
 
 	# Create debug arrow nodes
 	_create_debug_arrows()
+
+	# Create seabed depth HUD
+	seabed_hud = SeabedDepthHUD.new()
+	seabed_hud.name = "SeabedDepthHUD"
+	add_child(seabed_hud)
 
 	print("ExternalView: Initialized")
 

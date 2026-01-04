@@ -62,6 +62,9 @@ var bearing_label: Label
 var bearing_arc: Control
 var submarine_indicator: Control
 
+## Seabed depth HUD
+var seabed_hud: SeabedDepthHUD = null
+
 
 func _ready() -> void:
 	# Find camera in scene tree
@@ -94,6 +97,11 @@ func _ready() -> void:
 
 	# Setup HUD elements
 	_setup_hud()
+
+	# Create seabed depth HUD
+	seabed_hud = SeabedDepthHUD.new()
+	seabed_hud.name = "SeabedDepthHUD"
+	add_child(seabed_hud)
 
 	print("PeriscopeView: Initialized")
 
@@ -183,6 +191,7 @@ func handle_zoom_input(delta_zoom: float) -> void:
 
 ## Check if submarine is below periscope depth
 ## Uses hysteresis to prevent flickering at the surface
+## Validates: Requirement 9.2 (periscope depth relative to sea level)
 func is_underwater() -> bool:
 	if not camera:
 		return false
@@ -191,14 +200,14 @@ func is_underwater() -> bool:
 
 	# Use camera position directly - forward offset caused issues with pitch
 
+	# Get current sea level from SeaLevelManager (Requirement 9.2)
+	var sea_level_meters = SeaLevelManager.get_sea_level_meters() if SeaLevelManager else 0.0
+
 	# Get wave height directly to apply custom hysteresis
-	var wave_height = 0.0
+	var wave_height = sea_level_meters  # Default to current sea level
 	if ocean_renderer and ocean_renderer.initialized:
 		# Use get_wave_height_3d for accurate displacement
 		wave_height = ocean_renderer.get_wave_height_3d(cam_pos)
-	elif simulation_state:
-		# Fallback if ocean not ready
-		wave_height = 0.0  # Default sea level is 0
 
 	# Current height of camera relative to waves
 	# Positive = above water, Negative = underwater
