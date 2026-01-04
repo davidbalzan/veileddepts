@@ -7,7 +7,7 @@ var camera: Camera3D
 var initialized: bool = false
 
 @export_group("Wave Settings")
-@export var wind_speed: float = 30.0
+@export var wind_speed: float = 5.0  # Lower wind = smaller waves (~0.20m)
 @export var wind_direction_degrees: float = 0.0
 @export_range(0.0, 2.5, 0.1) var choppiness: float = 1.5
 @export var time_scale: float = 1.0
