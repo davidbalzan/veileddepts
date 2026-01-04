@@ -10,6 +10,9 @@ uniform float chunk_size = 512.0;
 uniform float sea_level = 0.0;
 uniform float bump_strength = 1.0;
 uniform float underwater_visibility = 50.0;  // Distance in meters for underwater darkening
+uniform bool debug_color_mode = false;  // Enable bright height-based debug colors
+uniform float min_elevation = -200.0;  // Mission area minimum elevation
+uniform float max_elevation = 100.0;   // Mission area maximum elevation
 
 // Biome colors (matching BiomeType enum)
 // 0: DEEP_WATER
@@ -160,30 +163,65 @@ void fragment() {
 	// Blend bump normal with surface normal
 	vec3 final_normal = normalize(NORMAL + bump_normal * 0.3);
 	
+	// Debug color mode - bright height-based colors for visibility testing
+	if (debug_color_mode) {
+		// Normalize height to 0-1 range within mission area
+		float height_normalized = clamp((world_position.y - min_elevation) / (max_elevation - min_elevation), 0.0, 1.0);
+
+		// Create rainbow gradient based on height
+		// Deep = blue, shallow = cyan, sea level = green, above = yellow/red
+		vec3 debug_color;
+		if (height_normalized < 0.25) {
+			// Deep blue to cyan (deepest areas)
+			float t = height_normalized / 0.25;
+			debug_color = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), t);
+		} else if (height_normalized < 0.5) {
+			// Cyan to green (mid-depth to near sea level)
+			float t = (height_normalized - 0.25) / 0.25;
+			debug_color = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), t);
+		} else if (height_normalized < 0.75) {
+			// Green to yellow (sea level to above)
+			float t = (height_normalized - 0.5) / 0.25;
+			debug_color = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), t);
+		} else {
+			// Yellow to red (highest areas)
+			float t = (height_normalized - 0.75) / 0.25;
+			debug_color = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), t);
+		}
+
+		ALBEDO = debug_color;
+		ROUGHNESS = 0.8;
+		METALLIC = 0.0;
+		NORMAL = final_normal;
+		return;
+	}
+
 	// Underwater rendering effects
 	float depth_factor = 1.0;
 	if (world_position.y < sea_level) {
 		float depth = sea_level - world_position.y;
-		
-		// Gentler exponential darkening - increase visibility range for gameplay
-		// Using 150m visibility instead of 50m for better seabed visibility
-		float effective_visibility = underwater_visibility * 3.0;
-		depth_factor = exp(-depth / effective_visibility);
-		
-		// Ensure minimum visibility (don't go completely black)
-		depth_factor = max(depth_factor, 0.25);
-		
-		// Add blue tint for underwater
-		vec3 water_tint = vec3(0.3, 0.5, 0.7);
-		blended_color = mix(blended_color * water_tint, blended_color, depth_factor);
-		
-		// Increase roughness underwater (less specular)
-		base_roughness = min(1.0, base_roughness + 0.2);
+
+		// Very gentle exponential darkening for mission area depths
+		// Using 0.0005 falloff rate (4x slower than original 0.002)
+		// This ensures terrain remains visible at typical gameplay depths (0-200m)
+		float falloff_rate = 0.0005;
+		depth_factor = exp(-depth * falloff_rate);
+
+		// Higher minimum visibility (40% instead of 25%) for better gameplay
+		depth_factor = max(depth_factor, 0.40);
+
+		// Subtle blue tint for underwater - less aggressive
+		vec3 water_tint = vec3(0.5, 0.65, 0.8);
+		float tint_factor = min(depth / 100.0, 0.5);  // Max 50% tint at 100m+
+		blended_color = mix(blended_color, blended_color * water_tint, tint_factor);
+
+		// Slight roughness increase underwater (less specular)
+		base_roughness = min(1.0, base_roughness + 0.1);
 	}
-	
+
 	// Apply depth darkening
 	vec3 final_color = blended_color * depth_factor;
-	
+
 	// Output
 	ALBEDO = final_color;
 	ROUGHNESS = base_roughness;

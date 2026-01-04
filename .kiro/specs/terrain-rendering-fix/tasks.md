@@ -121,7 +121,7 @@ This implementation plan addresses critical terrain visibility issues and establ
   - Check LOD switching works on zoom
   - Ask user to verify performance
 
-- [ ] 8. Implement Calibration System
+- [x] 8. Implement Calibration System
   - [x] 8.1 Add height calibration using reference points
     - Create `HeightCalibration` class
     - Scan heightmap for min/max pixel values
@@ -136,14 +136,14 @@ This implementation plan addresses critical terrain visibility issues and establ
     - Save calibration to `user://terrain_calibration.cfg`
     - _Requirements: 4.1_
 
-- [ ] 9. Improve Terrain Shader Visibility
-  - [ ] 9.1 Reduce depth-based darkening
+- [x] 9. Improve Terrain Shader Visibility
+  - [x] 9.1 Reduce depth-based darkening
     - Modify `shaders/terrain_chunk.gdshader`
     - Change depth falloff from 0.002 to 0.0005 (4x slower)
     - Ensure terrain visible at mission area depths
     - _Requirements: 5.2, 5.3, 5.4_
 
-  - [ ] 9.2 Add debug color mode
+  - [x] 9.2 Add debug color mode
     - Add `debug_color_mode` uniform to shader
     - When enabled, render terrain with bright height-based colors
     - Add toggle in F3 debug panel

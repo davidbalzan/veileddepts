@@ -541,3 +541,39 @@ func get_distance_to_chunk(world_pos: Vector3, chunk_coord: Vector2i) -> float:
 ## @return: Array of Vector2i chunk coordinates
 func get_chunks_in_radius(world_pos: Vector3, radius: float) -> Array[Vector2i]:
 	return _chunk_coordinates.get_chunks_in_radius(world_pos, radius)
+
+
+## Debug color mode state
+var _debug_color_mode: bool = false
+
+
+## Toggle debug color mode on all terrain chunks
+##
+## When enabled, renders terrain with bright height-based colors
+## for debugging visibility issues.
+##
+## @param enabled: True to enable debug colors, false for normal rendering
+func set_debug_color_mode(enabled: bool) -> void:
+	_debug_color_mode = enabled
+
+	# Update all loaded chunk materials
+	for chunk_coord in _chunk_grid:
+		var chunk: TerrainChunk = _chunk_grid[chunk_coord]
+		if chunk and chunk.material:
+			chunk.material.set_shader_parameter("debug_color_mode", enabled)
+
+	if _logger:
+		_logger.log_info(
+			"ChunkManager",
+			"Debug color mode " + ("enabled" if enabled else "disabled"),
+			{"chunk_count": str(_chunk_grid.size())}
+		)
+	else:
+		print("ChunkManager: Debug color mode %s (%d chunks)" % [
+			"enabled" if enabled else "disabled", _chunk_grid.size()
+		])
+
+
+## Get current debug color mode state
+func is_debug_color_mode() -> bool:
+	return _debug_color_mode
