@@ -257,6 +257,8 @@ func update_physics(delta: float) -> void:
 			submarine_body.linear_velocity = velocity
 	
 	var forward_speed = velocity.dot(forward_dir)
+	# Use total speed for dive plane effectiveness - water still flows even when turning
+	var effective_speed_for_planes = max(abs(forward_speed), velocity.length() * 0.7)
 
 	# Get control inputs from simulation state
 	var target_speed = simulation_state.target_speed if simulation_state else 0.0
@@ -302,13 +304,13 @@ func update_physics(delta: float) -> void:
 	var vertical_velocity = velocity.y
 	var pitch_angular_velocity = submarine_body.angular_velocity.x
 	var dive_plane_torque = dive_plane_system.calculate_dive_plane_torque(
-		depth, target_depth, vertical_velocity, abs(forward_speed), rad_to_deg(current_pitch), pitch_angular_velocity
+		depth, target_depth, vertical_velocity, effective_speed_for_planes, rad_to_deg(current_pitch), pitch_angular_velocity
 	)
 	
 	# Debug: Log heading-dependent pitch behavior
 	if debug_mode and Engine.get_process_frames() % 120 == 0:
-		print("[PITCH DEBUG] heading=%.0f° pitch=%.1f° fwd_spd=%.1f m/s tgt_depth=%.1f cur_depth=%.1f torque=%.0f Nm" % [
-			current_heading, rad_to_deg(current_pitch), forward_speed, target_depth, depth, dive_plane_torque
+		print("[PITCH DEBUG] heading=%.0f° pitch=%.1f° fwd=%.1f eff=%.1f m/s depth=%.1f->%.1f torque=%.0f" % [
+			current_heading, rad_to_deg(current_pitch), forward_speed, effective_speed_for_planes, depth, target_depth, dive_plane_torque
 		])
 	
 	# Log excessive torques
@@ -323,13 +325,22 @@ func update_physics(delta: float) -> void:
 	if is_finite(dive_plane_torque):
 		submarine_body.apply_torque(local_pitch_axis * dive_plane_torque)
 	
-	# Manual roll damping - axis lock isn't preventing roll!
-	# Apply counter-torque to kill any roll motion (use local Z axis)
-	var roll_damping_coefficient = 5000000.0  # Strong damping for roll (keep roll locked)
+	# Roll stabilization - submarines have natural righting moment due to ballast tanks
+	# Two components: (1) righting torque proportional to roll angle, (2) damping proportional to angular velocity
 	var local_roll_axis = submarine_body.global_transform.basis.z
+	var current_roll = submarine_body.rotation.z  # Roll angle in radians
 	var roll_angular_velocity = submarine_body.angular_velocity.dot(local_roll_axis)
+
+	# Righting torque - pushes sub back to level (like a ship's metacentric height)
+	var roll_righting_coefficient = 8000000.0  # Strong righting moment
+	var roll_righting_torque = -current_roll * roll_righting_coefficient
+
+	# Damping torque - prevents oscillation
+	var roll_damping_coefficient = 6000000.0  # Strong damping
 	var roll_damping_torque = -roll_angular_velocity * roll_damping_coefficient
-	submarine_body.apply_torque(local_roll_axis * roll_damping_torque)
+
+	# Apply combined roll correction
+	submarine_body.apply_torque(local_roll_axis * (roll_righting_torque + roll_damping_torque))
 	
 	# Manual pitch damping to prevent oscillation (use local X axis)
 	# With torque_coefficient at 1500, we need proportional damping
@@ -338,6 +349,22 @@ func update_physics(delta: float) -> void:
 	var local_pitch_angular_velocity = submarine_body.angular_velocity.dot(local_pitch_axis)
 	var pitch_damping_torque = -local_pitch_angular_velocity * pitch_damping_coefficient
 	submarine_body.apply_torque(local_pitch_axis * pitch_damping_torque)
+
+	# LOW-SPEED PITCH ASSIST: When moving slowly, use ballast-induced pitch for depth control
+	# Real subs use trim tanks to adjust pitch at low speeds - simulate this
+	if abs(forward_speed) < 2.0:  # Low speed threshold
+		var depth_error = target_depth - depth
+		# For ascending (depth_error < 0), pitch nose up slightly to help
+		# For descending (depth_error > 0), pitch nose down slightly
+		var desired_pitch_for_depth = -depth_error * 0.01  # Subtle pitch per meter of depth error
+		desired_pitch_for_depth = clamp(desired_pitch_for_depth, -0.15, 0.15)  # Max ~8.5 degrees
+
+		var pitch_error_for_assist = desired_pitch_for_depth - current_pitch
+		var low_speed_pitch_torque = pitch_error_for_assist * 2000000.0  # Gentle correction
+
+		# Scale by how slow we are (full effect at 0 m/s, none at 2 m/s)
+		var low_speed_factor = 1.0 - (abs(forward_speed) / 2.0)
+		submarine_body.apply_torque(local_pitch_axis * low_speed_pitch_torque * low_speed_factor)
 	
 	# SAFETY: Hard pitch angle limiter - prevent submarine from going vertical
 	# Clamp pitch to ±30° maximum (anything more is catastrophic for crew)
