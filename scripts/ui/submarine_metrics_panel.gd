@@ -161,10 +161,38 @@ func _build_ui() -> void:
 	_ascent_arrow_label = ascent_arrow
 	print("SubmarineMetricsPanel: Ascent arrow created and added to middle_panel")
 	
-	# Right section - Visual gauges
+	# Right section - Control buttons and gauges
+	var right_section = VBoxContainer.new()
+	right_section.add_theme_constant_override("separation", 10)
+	content.add_child(right_section)
+	
+	# Control buttons row
+	var button_row = HBoxContainer.new()
+	button_row.add_theme_constant_override("separation", 8)
+	right_section.add_child(button_row)
+	
+	var level_button = Button.new()
+	level_button.text = "LEVEL SUB"
+	level_button.custom_minimum_size = Vector2(100, 32)
+	level_button.pressed.connect(_on_level_sub_pressed)
+	button_row.add_child(level_button)
+	
+	var surface_button = Button.new()
+	surface_button.text = "SURFACE"
+	surface_button.custom_minimum_size = Vector2(100, 32)
+	surface_button.pressed.connect(_on_emergency_surface_pressed)
+	button_row.add_child(surface_button)
+	
+	var trim_button = Button.new()
+	trim_button.text = "RESET TRIM"
+	trim_button.custom_minimum_size = Vector2(100, 32)
+	trim_button.pressed.connect(_on_reset_trim_pressed)
+	button_row.add_child(trim_button)
+	
+	# Gauge panel
 	var gauge_panel = HBoxContainer.new()
 	gauge_panel.add_theme_constant_override("separation", 15)
-	content.add_child(gauge_panel)
+	right_section.add_child(gauge_panel)
 	
 	# Speed gauge
 	var speed_container = VBoxContainer.new()
@@ -345,11 +373,31 @@ func _update_metrics() -> void:
 			_ascent_arrow_label.text = "--"  # Stable
 			_ascent_arrow_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 	
-	# Dive plane angle (approximate from pitch and target depth)
-	var depth_error = simulation_state.target_depth - depth
-	var desired_pitch = clamp(depth_error * 0.1, -15, 15)  # Simplified calculation
+	# Dive plane angle - get actual commanded angle from physics
+	# The dive plane system in submarine_physics_v2 calculates the real angle
+	# We need to extract it from the torque or calculate it the same way
+	var dive_plane_angle = 0.0
+	if submarine_body and submarine_body.has_method("get_dive_plane_angle"):
+		dive_plane_angle = submarine_body.get_dive_plane_angle()
+	else:
+		# Fallback: calculate similar to dive plane system but with rolloff
+		var depth_error = simulation_state.target_depth - depth
+		var vertical_velocity = submarine_body.linear_velocity.y if submarine_body else 0.0
+		var predicted_depth = depth + (vertical_velocity * 3.0)
+		var predicted_error = simulation_state.target_depth - predicted_depth
+		var blended_error = (predicted_error * 0.7) + (depth_error * 0.3)
+		dive_plane_angle = clamp(-blended_error / 75.0, -15, 15)
+		
+		# Apply pitch limit rolloff (same as dive_plane_system.gd)
+		var current_pitch_deg = rad_to_deg(submarine_body.rotation.x) if submarine_body else 0.0
+		var abs_pitch = abs(current_pitch_deg)
+		if abs_pitch > 15.0:
+			var rolloff_progress = (abs_pitch - 15.0) / 10.0  # 15-25° range
+			var authority_factor = 1.0 - clamp(rolloff_progress, 0.0, 1.0)
+			dive_plane_angle *= authority_factor
+	
 	if dive_plane_angle_value:
-		dive_plane_angle_value.text = "%+.1f°" % desired_pitch
+		dive_plane_angle_value.text = "%+.1f°" % dive_plane_angle
 
 
 func _draw_speed_gauge() -> void:
@@ -498,3 +546,42 @@ func _gui_input(event: InputEvent) -> void:
 		new_pos.y = clamp(new_pos.y, 0, viewport_size.y - size.y)
 		global_position = new_pos
 		panel_moved.emit(new_pos)
+
+
+## Control button handlers
+func _on_level_sub_pressed() -> void:
+	print("Level Sub: Leveling submarine pitch and roll")
+	if submarine_body:
+		# Get physics system
+		var main = get_tree().root.get_node_or_null("Main")
+		if main:
+			var physics = main.get_node_or_null("SubmarinePhysicsV2")
+			if physics and physics.has_method("level_submarine"):
+				physics.level_submarine()
+			else:
+				# Manually apply leveling forces
+				var current_angular_vel = submarine_body.angular_velocity
+				# Dampen all rotational motion
+				submarine_body.angular_velocity = current_angular_vel * 0.5
+				print("Applied manual leveling - dampened angular velocity")
+
+
+func _on_emergency_surface_pressed() -> void:
+	print("Emergency Surface: Setting target depth to 0m")
+	if simulation_state:
+		simulation_state.set_target_depth(0.0)
+		# Also reduce speed to prevent overshooting
+		var current_speed = simulation_state.target_speed
+		if abs(current_speed) > 2.0:
+			simulation_state.set_target_speed(2.0 if current_speed > 0 else -2.0)
+		print("Target depth set to 0m, speed reduced for controlled surfacing")
+
+
+func _on_reset_trim_pressed() -> void:
+	print("Reset Trim: Resetting ballast system PID")
+	var main = get_tree().root.get_node_or_null("Main")
+	if main:
+		var physics = main.get_node_or_null("SubmarinePhysicsV2")
+		if physics and physics.has_method("reset_ballast_trim"):
+			physics.reset_ballast_trim()
+			print("Ballast trim reset complete")

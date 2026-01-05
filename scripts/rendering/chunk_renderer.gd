@@ -19,21 +19,13 @@ class_name ChunkRenderer extends Node
 @export var chunk_size: float = 512.0
 
 ## Height scaling (from normalized 0-1 to real-world elevation)
-## These can be overridden for specific mission areas
-@export var min_elevation: float = -200.0  # Minimum terrain height (meters) - mission area default
-@export var max_elevation: float = 100.0   # Maximum terrain height (meters) - mission area default
+## Always uses full Earth elevation range for consistent real-world scale
+const MARIANA_TRENCH_DEPTH: float = -10994.0  # Deepest ocean point
+const MOUNT_EVEREST_HEIGHT: float = 8849.0    # Highest land point
 
-# Full Earth range (for reference, not used by default)
-const MARIANA_TRENCH_DEPTH: float = -10994.0
-const MOUNT_EVEREST_HEIGHT: float = 8849.0
-
-## Mission area configuration
-## When enabled, uses min_elevation/max_elevation for height scaling
-## When disabled, uses full Earth range (MARIANA_TRENCH_DEPTH to MOUNT_EVEREST_HEIGHT)
-@export var use_mission_area_scaling: bool = true
-
-## Signal emitted when mission area configuration changes
-signal mission_area_changed(min_elev: float, max_elev: float)
+# Elevation range used for all terrain (read-only)
+var min_elevation: float = MARIANA_TRENCH_DEPTH
+var max_elevation: float = MOUNT_EVEREST_HEIGHT
 
 ## Feature preservation
 @export var enable_feature_preservation: bool = true
@@ -74,69 +66,20 @@ func _ready() -> void:
 				"feature_preservation": str(enable_feature_preservation),
 				"min_elevation": "%.1f" % min_elevation,
 				"max_elevation": "%.1f" % max_elevation,
-				"use_mission_area_scaling": str(use_mission_area_scaling)
+				"elevation_range": "%.1f" % (max_elevation - min_elevation)
 			}
 		)
 
 
-## Configure mission area height range
+## Get the elevation range used for height scaling
 ##
-## Sets the elevation range for terrain height scaling.
-## Emits mission_area_changed signal when configuration changes.
-##
-## @param min_elev: Minimum elevation in meters (e.g., -200.0 for submarine gameplay)
-## @param max_elev: Maximum elevation in meters (e.g., 100.0 for coastal areas)
-func configure_mission_area(min_elev: float, max_elev: float) -> void:
-	if min_elev >= max_elev:
-		push_error("ChunkRenderer: Invalid mission area range: min (%.1f) must be less than max (%.1f)" % [min_elev, max_elev])
-		return
-	
-	min_elevation = min_elev
-	max_elevation = max_elev
-	use_mission_area_scaling = true
-	
-	if _logger:
-		_logger.log_info(
-			"ChunkRenderer",
-			"Mission area configured",
-			{
-				"min_elevation": "%.1f" % min_elevation,
-				"max_elevation": "%.1f" % max_elevation
-			}
-		)
-	
-	mission_area_changed.emit(min_elevation, max_elevation)
-
-
-## Get current mission area configuration
-##
-## @return: Dictionary with min_elevation, max_elevation, use_mission_area_scaling
-func get_mission_area_config() -> Dictionary:
+## @return: Dictionary with min and max elevation (always Earth scale)
+func get_elevation_range() -> Dictionary:
 	return {
-		"min_elevation": min_elevation,
-		"max_elevation": max_elevation,
-		"use_mission_area_scaling": use_mission_area_scaling,
-		"elevation_range": max_elevation - min_elevation
+		"min": min_elevation,
+		"max": max_elevation,
+		"range": max_elevation - min_elevation
 	}
-
-
-## Get the effective elevation range for height scaling
-##
-## Returns the min/max elevation values currently in use,
-## either mission area values or full Earth range.
-##
-## @return: Dictionary with min and max elevation
-func get_effective_elevation_range() -> Dictionary:
-	if use_mission_area_scaling:
-		return {
-			"min": min_elevation,
-			"max": max_elevation
-		}
-	else:
-		return {
-			"min": MARIANA_TRENCH_DEPTH,
-			"max": MOUNT_EVEREST_HEIGHT
-		}
 
 
 func _initialize_shader() -> void:
@@ -288,12 +231,11 @@ func _create_vertex_data(
 	else:
 		hm_z = clamp(hm_z, 0, base_resolution - 1)
 
-	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
+	# Use bilinear interpolation for smooth terrain
+	var height_normalized = _sample_heightmap_smooth(heightmap, hm_x, hm_z, base_resolution)
 	
-	# Get effective elevation range (mission area or full Earth range)
-	var elev_range = get_effective_elevation_range()
-	# Convert from normalized (0-1) to elevation range
-	var height_value = lerp(elev_range.min, elev_range.max, height_normalized)
+	# Convert from normalized (0-1) to Earth elevation range
+	var height_value = lerp(min_elevation, max_elevation, height_normalized)
 
 	# Calculate world position
 	var local_x = (float(x) / (lod_resolution - 1)) * chunk_size
@@ -325,12 +267,11 @@ func _create_vertex_data_from_heightmap_coord(
 	_chunk_size: float,
 	base_resolution: int
 ) -> VertexData:
-	var height_normalized = heightmap.get_pixel(hm_x, hm_z).r
+	# Use bilinear interpolation for smooth terrain
+	var height_normalized = _sample_heightmap_smooth(heightmap, hm_x, hm_z, base_resolution)
 	
-	# Get effective elevation range (mission area or full Earth range)
-	var elev_range = get_effective_elevation_range()
-	# Convert from normalized (0-1) to elevation range
-	var height_value = lerp(elev_range.min, elev_range.max, height_normalized)
+	# Convert from normalized (0-1) to Earth elevation range
+	var height_value = lerp(min_elevation, max_elevation, height_normalized)
 
 	# Calculate local position within chunk
 	var local_x = (float(hm_x) / (base_resolution - 1)) * chunk_size
@@ -627,6 +568,81 @@ func create_chunk_material(biome_map: Image, bump_map: Image) -> ShaderMaterial:
 	material.set_shader_parameter("underwater_visibility", 50.0)
 
 	return material
+
+
+## Sample heightmap with aggressive smoothing for terrain, preserving sharp features
+func _sample_heightmap_smooth(heightmap: Image, x: int, z: int, _resolution: int) -> float:
+	var width = heightmap.get_width()
+	var height = heightmap.get_height()
+	
+	# Clamp coordinates to valid range
+	x = clampi(x, 0, width - 1)
+	z = clampi(z, 0, height - 1)
+	
+	# For edge pixels, just return direct value
+	if x <= 4 or x >= width - 5 or z <= 4 or z >= height - 5:
+		return heightmap.get_pixel(x, z).r
+	
+	var center_height = heightmap.get_pixel(x, z).r
+	
+	# First pass: detect if we're near a major feature (cliff, trench)
+	# Check larger neighborhood to understand terrain context
+	var max_gradient = 0.0
+	var gradient_sum = 0.0
+	var gradient_count = 0
+	
+	for dx in range(-3, 4):
+		for dz in range(-3, 4):
+			if dx == 0 and dz == 0:
+				continue
+			var sample_x = clampi(x + dx, 0, width - 1)
+			var sample_z = clampi(z + dz, 0, height - 1)
+			var h = heightmap.get_pixel(sample_x, sample_z).r
+			var gradient = abs(h - center_height)
+			max_gradient = max(max_gradient, gradient)
+			gradient_sum += gradient
+			gradient_count += 1
+	
+	var avg_gradient = gradient_sum / float(gradient_count)
+	
+	# Only preserve MAJOR features (cliffs, trenches) - threshold lowered significantly
+	# Submarine length ~100m, so we want to smooth spikes < ~50m (0.0025 in normalized space)
+	if max_gradient > 0.15 and avg_gradient > 0.05:
+		# This is a major cliff/trench - moderate smoothing with 5x5 grid
+		var feature_sum: float = 0.0
+		var feature_weight_sum: float = 0.0
+		for dx in range(-2, 3):
+			for dz in range(-2, 3):
+				var sample_x = clampi(x + dx, 0, width - 1)
+				var sample_z = clampi(z + dz, 0, height - 1)
+				var h = heightmap.get_pixel(sample_x, sample_z).r
+				var dist_sq = float(dx * dx + dz * dz)
+				var sigma = 1.2
+				var weight = exp(-dist_sq / (2.0 * sigma * sigma))
+				feature_sum += h * weight
+				feature_weight_sum += weight
+		return feature_sum / feature_weight_sum
+	
+	# For everything else: Aggressive smoothing to remove artificial spikes
+	# Use 11x11 Gaussian to smooth out submarine-sized irregularities
+	var sum: float = 0.0
+	var weight_sum: float = 0.0
+	
+	for dx in range(-5, 6):
+		for dz in range(-5, 6):
+			var sample_x = clampi(x + dx, 0, width - 1)
+			var sample_z = clampi(z + dz, 0, height - 1)
+			var h = heightmap.get_pixel(sample_x, sample_z).r
+			
+			# Wider Gaussian for smoother terrain
+			var dist_sq = float(dx * dx + dz * dz)
+			var sigma = 2.5  # Increased spread for smoother results
+			var weight = exp(-dist_sq / (2.0 * sigma * sigma))
+			
+			sum += h * weight
+			weight_sum += weight
+	
+	return sum / weight_sum
 
 
 ## Get terrain shader code

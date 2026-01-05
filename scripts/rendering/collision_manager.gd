@@ -375,9 +375,9 @@ func _sample_heightmap_bilinear(heightmap: Image, u: float, v: float) -> float:
 	return result
 
 
-# Constants for vertical scaling - MUST MATCH ChunkRenderer mission area range!
-const MIN_ELEVATION: float = -200.0  # Mission area minimum (meters)
-const MAX_ELEVATION: float = 100.0   # Mission area maximum (meters)
+# Constants for vertical scaling - Earth scale (matches ChunkRenderer)
+const MIN_ELEVATION: float = -10994.0  # Mariana Trench (meters)
+const MAX_ELEVATION: float = 8849.0    # Mount Everest (meters)
 
 
 ## Get height value from a pixel in the heightmap (scaled to world units)
@@ -385,13 +385,13 @@ const MAX_ELEVATION: float = 100.0   # Mission area maximum (meters)
 ## @param heightmap: Heightmap image
 ## @param x: Pixel X coordinate
 ## @param y: Pixel Y coordinate
-## @return: Height value in meters
+## @return: Height value in meters (Earth scale)
 func _get_pixel_height(heightmap: Image, x: int, y: int) -> float:
 	var color: Color = heightmap.get_pixel(x, y)
 	# Red channel contains normalized height (0.0 to 1.0)
 	var normalized_height: float = color.r
 
-	# Scale to world units using mission area range (matches ChunkRenderer)
+	# Scale to world units using Earth elevation range
 	return lerpf(MIN_ELEVATION, MAX_ELEVATION, normalized_height)
 
 

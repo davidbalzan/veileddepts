@@ -73,6 +73,7 @@ enum FFTResolution {
 @export_range(0, 2048) var horizontal_dimension := 256:
 	set(new_horizontal_dimension):
 		horizontal_dimension = new_horizontal_dimension
+		_uv_scale = 1.0 / float(horizontal_dimension)
 		_is_initial_spectrum_changed = true
 
 ## The time scale for the simulation. Speeds up or slows down the waves.
@@ -676,6 +677,9 @@ func _initialize_simulation() -> void:
 		_waves_image_cascade[i] = Image.create(fft_resolution, fft_resolution, false, Image.FORMAT_RGBAF)
 		_waves_texture_cascade[i] = Texture2DRD.new()
 		_waves_texture_cascade[i].texture_rd_rid = _spectrum_tex_cascade[i]
+	
+	# Calculate UV scale based on horizontal dimension
+	_uv_scale = 1.0 / float(horizontal_dimension)
 	
 	material.set_shader_parameter("cascade_displacements", _waves_texture_cascade)
 	material.set_shader_parameter("cascade_uv_scales", cascade_scales)

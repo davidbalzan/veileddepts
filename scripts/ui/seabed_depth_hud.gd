@@ -67,6 +67,10 @@ func _update_depth_display() -> void:
 	var sub_pos = _submarine.global_position
 	var seabed_height = _terrain_renderer.get_height_at(Vector2(sub_pos.x, sub_pos.z))
 
+	# Debug: Print values to understand what's happening
+	if Engine.get_frames_drawn() % 60 == 0:  # Print once per second
+		print("SeabedDepthHUD: Sub Y=%.1f, Seabed=%.1f" % [sub_pos.y, seabed_height])
+
 	# Calculate distance from submarine to seabed
 	var depth_to_seabed = sub_pos.y - seabed_height
 

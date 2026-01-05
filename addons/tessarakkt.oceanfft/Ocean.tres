@@ -1,4 +1,4 @@
-[gd_resource type="ShaderMaterial" load_steps=12 format=3 uid="uid://cmyo0unntq078"]
+[gd_resource type="ShaderMaterial" load_steps=10 format=3 uid="uid://cmyo0unntq078"]
 
 [ext_resource type="Shader" uid="uid://dddvgper22b7o" path="res://addons/tessarakkt.oceanfft/shaders/SurfaceVisual.gdshader" id="1_56q88"]
 
@@ -6,19 +6,19 @@
 colors = PackedColorArray(0, 0, 0, 1, 0, 0, 0, 1)
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_cascade0"]
+gradient = SubResource("Gradient_cascade")
 width = 4
 height = 4
-gradient = SubResource("Gradient_cascade")
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_cascade1"]
+gradient = SubResource("Gradient_cascade")
 width = 4
 height = 4
-gradient = SubResource("Gradient_cascade")
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_cascade2"]
+gradient = SubResource("Gradient_cascade")
 width = 4
 height = 4
-gradient = SubResource("Gradient_cascade")
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_nywmb"]
 noise_type = 3

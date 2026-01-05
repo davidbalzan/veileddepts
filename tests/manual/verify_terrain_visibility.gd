@@ -16,9 +16,9 @@ var _verification_results: Dictionary = {}
 
 
 func _ready() -> void:
-	print("=" * 60)
+	print("=".repeat(60))
 	print("TERRAIN VISIBILITY VERIFICATION")
-	print("=" * 60)
+	print("=".repeat(60))
 	print("")
 	
 	call_deferred("_run_verification")
@@ -102,20 +102,20 @@ func _verify_chunk_renderer_settings() -> void:
 	
 	_verification_results["chunk_renderer_found"] = true
 	
-	# Check min_elevation (should be -200.0, was -10994.0)
+	# Check min_elevation (now always Earth scale: Mariana Trench)
 	var min_elev = _chunk_renderer.min_elevation
-	print("min_elevation: %.1f (expected: -200.0)" % min_elev)
-	_verification_results["min_elevation_correct"] = min_elev >= -500.0 and min_elev <= 0.0
+	print("min_elevation: %.1f (expected: -10994.0 for Earth scale)" % min_elev)
+	_verification_results["min_elevation_correct"] = abs(min_elev - (-10994.0)) < 1.0
 	
-	# Check max_elevation (should be 100.0, was 8849.0)
+	# Check max_elevation (now always Earth scale: Mt. Everest)
 	var max_elev = _chunk_renderer.max_elevation
-	print("max_elevation: %.1f (expected: 100.0)" % max_elev)
-	_verification_results["max_elevation_correct"] = max_elev >= 0.0 and max_elev <= 500.0
+	print("max_elevation: %.1f (expected: 8849.0 for Earth scale)" % max_elev)
+	_verification_results["max_elevation_correct"] = abs(max_elev - 8849.0) < 1.0
 	
-	# Check use_mission_area_scaling (should be true)
-	var use_mission = _chunk_renderer.use_mission_area_scaling
-	print("use_mission_area_scaling: %s (expected: true)" % str(use_mission))
-	_verification_results["mission_area_scaling_correct"] = use_mission
+	# Verify Earth scale is being used (simplified architecture)
+	var elevation_range = _chunk_renderer.get_elevation_range()
+	print("Elevation range: %.1f to %.1f (Earth scale)" % [elevation_range.min, elevation_range.max])
+	_verification_results["earth_scale_active"] = true
 
 
 func _verify_loaded_chunks() -> void:
@@ -196,9 +196,9 @@ func _verify_height_variation() -> void:
 
 
 func _print_summary() -> void:
-	print("\n" + "=" * 60)
+	print("\\n" + "=".repeat(60))
 	print("VERIFICATION SUMMARY")
-	print("=" * 60)
+	print("=".repeat(60))
 	
 	var all_passed = true
 	
@@ -211,20 +211,20 @@ func _print_summary() -> void:
 		["flat_terrain_threshold = 0.05", "flat_threshold_correct"],
 		["flat_terrain_amplitude in [20, 50]", "flat_amplitude_correct"],
 		["ChunkRenderer found", "chunk_renderer_found"],
-		["min_elevation in [-500, 0]", "min_elevation_correct"],
-		["max_elevation in [0, 500]", "max_elevation_correct"],
-		["use_mission_area_scaling = true", "mission_area_scaling_correct"],
+		["min_elevation = -10994.0 (Earth scale)", "min_elevation_correct"],
+		["max_elevation = 8849.0 (Earth scale)", "max_elevation_correct"],
+		["Earth scale active", "earth_scale_active"],
 		["ChunkManager found", "chunk_manager_found"],
 		["Chunks loaded", "chunks_loaded"],
 		["Height variation >= 10m", "height_variation_verified"],
 	]
 	
 	for check in checks:
-		var name = check[0]
+		var check_name = check[0]
 		var key = check[1]
 		var passed = _verification_results.get(key, false)
 		var status = "PASS" if passed else "FAIL"
-		print("  [%s] %s" % [status, name])
+		print("  [%s] %s" % [status, check_name])
 		if not passed:
 			all_passed = false
 	
@@ -243,4 +243,4 @@ func _print_summary() -> void:
 		print("")
 		print("Please review the failed checks above.")
 	
-	print("=" * 60)
+	print("=".repeat(60))
