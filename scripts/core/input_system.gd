@@ -182,7 +182,6 @@ func _handle_global_submarine_controls(event: InputEvent) -> bool:
 	elif _is_key_bound_to_action(key_event.keycode, "toggle_metrics_panel"):
 		_toggle_metrics_panel()
 		return true
-		return true
 
 	return false
 

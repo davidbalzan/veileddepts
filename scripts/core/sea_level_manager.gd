@@ -21,17 +21,17 @@ signal sea_level_changed(normalized_value: float, meters_value: float)
 # @param operation: Description of the operation in progress
 signal update_progress(progress: float, operation: String)
 
-# Constants for elevation scaling - MUST MATCH mission area range in ChunkRenderer!
-const MIN_ELEVATION: float = -200.0   # Mission area minimum (meters)
-const MAX_ELEVATION: float = 100.0    # Mission area maximum (meters)
+# Constants for elevation scaling - Using full Earth range for real-world scale
+const MIN_ELEVATION: float = -10994.0   # Mariana Trench (meters)
+const MAX_ELEVATION: float = 8849.0     # Mount Everest (meters)
 
-# Global Earth elevation range - used for world map visualization
+# Global Earth elevation range - same as above for consistency
 const MARIANA_TRENCH_DEPTH: float = -10994.0  # Lowest point on Earth (meters)
 const MOUNT_EVEREST_HEIGHT: float = 8849.0    # Highest point on Earth (meters)
 
-# Default sea level - calibrated for mission area range
-# Sea level at 0m = (0 - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION) = 200/300 = 0.667
-const DEFAULT_SEA_LEVEL: float = 0.667  # Normalized value for 0m sea level in mission area
+# Default sea level - calibrated for full Earth range
+# Sea level at 0m = (0 - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION) = 10994/19843 = 0.554
+const DEFAULT_SEA_LEVEL: float = 0.554  # Normalized value for 0m sea level in Earth scale
 
 # Performance constants
 const UPDATE_THROTTLE_MS: float = 100.0  # Minimum time between updates (milliseconds)

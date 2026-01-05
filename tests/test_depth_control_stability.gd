@@ -4,7 +4,7 @@ extends GutTest
 
 var test_scene: Node3D
 var submarine_body: RigidBody3D
-var submarine_physics: SubmarinePhysics
+var submarine_physics: SubmarinePhysicsV2
 var simulation_state: SimulationState
 
 # Data collection for analysis
@@ -35,7 +35,7 @@ func before_each() -> void:
 	test_scene.add_child(simulation_state)
 
 	# Create submarine physics (without ocean renderer for simplicity)
-	submarine_physics = SubmarinePhysics.new()
+	submarine_physics = SubmarinePhysicsV2.new()
 	test_scene.add_child(submarine_physics)
 	submarine_physics.initialize(submarine_body, null, simulation_state)
 

@@ -41,8 +41,8 @@ var _tiles_y: int = 0
 var _source_width: int = 0
 var _source_height: int = 0
 
-# Mission area mapping
-var mission_area_center_uv: Vector2 = Vector2(0.5, 0.5)
+# World coordinate origin in UV space (center of map by default)
+var world_origin_uv: Vector2 = Vector2(0.5, 0.5)
 
 # Procedural fallback
 var _procedural_noise: FastNoiseLite = null
@@ -321,9 +321,9 @@ func get_elevation(world_pos: Vector2) -> float:
 
 
 func _world_to_uv(world_pos: Vector2) -> Vector2:
-	# Convert world coordinates to UV (0-1), relative to mission center
-	var u = mission_area_center_uv.x + (world_pos.x / EarthScale.FULL_MAP_WIDTH_METERS)
-	var v = mission_area_center_uv.y + (world_pos.y / EarthScale.FULL_MAP_HEIGHT_METERS)
+	# Convert world coordinates to UV (0-1), relative to world origin
+	var u = world_origin_uv.x + (world_pos.x / EarthScale.FULL_MAP_WIDTH_METERS)
+	var v = world_origin_uv.y + (world_pos.y / EarthScale.FULL_MAP_HEIGHT_METERS)
 
 	# Wrap/clamp
 	u = fmod(u, 1.0)
@@ -512,7 +512,7 @@ func extract_region(world_bounds: Rect2, resolution: int) -> Image:
 			max_e = maxf(max_e, elevation)
 			sum_e += elevation
 
-			# Store as normalized value (0-1) for consistency
+			# Store as normalized value (0-1) using full Earth elevation range
 			var normalized = (elevation - MARIANA_TRENCH_DEPTH) / (MOUNT_EVEREST_HEIGHT - MARIANA_TRENCH_DEPTH)
 			region_image.set_pixel(x, y, Color(normalized, 0, 0, 1))
 

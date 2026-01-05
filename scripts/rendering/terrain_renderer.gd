@@ -116,7 +116,7 @@ func _setup_terrain() -> void:
 	_elevation_provider.name = "TiledElevationProvider"
 	_elevation_provider.tiles_directory = "res://assets/terrain/tiles/"
 	add_child(_elevation_provider)
-	_elevation_provider.mission_area_center_uv = heightmap_region.get_center()
+	_elevation_provider.world_origin_uv = heightmap_region.get_center()
 
 	# Initialize elevation provider
 	if not _elevation_provider.initialize():
@@ -489,7 +489,7 @@ func set_terrain_region(region: Rect2) -> void:
 	)
 	heightmap_region = region
 	if _elevation_provider:
-		_elevation_provider.mission_area_center_uv = region.get_center()
+		_elevation_provider.world_origin_uv = region.get_center()
 	
 	if _chunk_manager:
 		_chunk_manager.unload_all_chunks()

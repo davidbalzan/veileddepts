@@ -34,7 +34,11 @@ var _cache_frame: int = -1
 var mass: float = 8000.0  # tons
 var max_speed: float = 10.3  # m/s (20 knots)
 var max_depth: float = 400.0  # meters
-const MAX_SAFE_PITCH: float = 30.0  # Maximum pitch angle in degrees (safety limit)
+const MAX_SAFE_PITCH: float = 20.0  # Maximum pitch angle in degrees (hard safety limit)
+const SURFACE_MODE_DEPTH: float = 20.0  # Depth below which surface mode activates (start leveling)
+const PERISCOPE_DEPTH: float = 12.0  # Target depth for leveling before breach (must be level here)
+const SURFACE_FLOAT_DEPTH: float = 2.5  # Final floating depth after breach (conning tower visible)
+const HULL_HEIGHT: float = 8.0  # Approximate submarine hull height for clearance calculations
 # Note: map_boundary removed - dynamic terrain streaming allows unlimited exploration
 
 # Debug mode (Requirement 14.1)
@@ -202,6 +206,65 @@ func _get_forward_direction() -> Vector3:
 	return _cached_forward_direction
 
 
+## Get local pitch angle in radians (nose up/down)
+## Calculates true pitch relative to submarine's local frame, not world Euler angles
+## This ensures correct pitch reading regardless of submarine heading
+## 
+## CRITICAL FIX (TASK-011): Using local frame angles instead of world-frame Euler angles
+## Euler rotation.x/z values are world-aligned and become incorrect when submarine turns.
+## This was the root cause of "pitch only works after turning" bug.
+func _get_local_pitch() -> float:
+	if not submarine_body:
+		return 0.0
+	
+	var basis = submarine_body.global_transform.basis
+	var forward = -basis.z  # Local forward direction (-Z in Godot)
+	
+	# Pitch is the angle between forward vector and horizontal plane
+	# Positive pitch = nose up, negative pitch = nose down
+	var local_pitch = asin(clamp(-forward.y, -1.0, 1.0))
+	
+	return local_pitch
+
+
+## Get local roll angle in radians (bank left/right)
+## Calculates true roll relative to submarine's local frame, not world Euler angles
+## This ensures correct roll reading regardless of submarine heading
+func _get_local_roll() -> float:
+	if not submarine_body:
+		return 0.0
+	
+	var basis = submarine_body.global_transform.basis
+	var forward = -basis.z  # Local forward direction (-Z)
+	var up = basis.y        # Local up direction (Y)
+	var right = basis.x     # Local right direction (X)
+	
+	# Project local up onto plane perpendicular to forward
+	var up_projected = up - forward * up.dot(forward)
+	if up_projected.length_squared() < 0.0001:
+		# Submarine is pointing straight up or down, roll is undefined
+		return 0.0
+	up_projected = up_projected.normalized()
+	
+	# Project world up onto same plane
+	var world_up = Vector3.UP
+	var world_up_projected = world_up - forward * world_up.dot(forward)
+	if world_up_projected.length_squared() < 0.0001:
+		# Edge case: submarine pointing straight up/down
+		return 0.0
+	world_up_projected = world_up_projected.normalized()
+	
+	# Calculate angle between projected vectors
+	var cos_roll = clamp(up_projected.dot(world_up_projected), -1.0, 1.0)
+	var local_roll = acos(cos_roll)
+	
+	# Determine sign: positive roll = right side down
+	if right.dot(world_up) < 0:
+		local_roll = -local_roll
+	
+	return local_roll
+
+
 ## Update all physics forces
 ## Requirement 12.1: Execute physics updates in correct order
 ## Requirement 17.2: Same interface as SubmarinePhysics
@@ -264,6 +327,35 @@ func update_physics(delta: float) -> void:
 	var target_speed = simulation_state.target_speed if simulation_state else 0.0
 	var target_heading = simulation_state.target_heading if simulation_state else 0.0
 	var target_depth = simulation_state.target_depth if simulation_state else 0.0
+	
+	# SURFACE MODE: Multi-stage surfacing behavior
+	# Stage 1 (20-12m): Level out to periscope depth
+	# Stage 2 (12-2.5m): Let buoyancy bring sub to surface naturally
+	# Stage 3 (<2.5m): Maintain stable float at surface
+	# CRITICAL: Only activate surface mode if BOTH target is shallow AND we're already shallow
+	var effective_target_depth = target_depth
+	var surface_mode = false
+	
+	# Surface mode only activates when trying to surface from shallow depth
+	# This allows diving back down from surface
+	if target_depth < SURFACE_MODE_DEPTH and depth < SURFACE_MODE_DEPTH:
+		surface_mode = true
+		
+		if depth > PERISCOPE_DEPTH:
+			# Stage 1: Approaching periscope depth - actively control to PERISCOPE_DEPTH
+			effective_target_depth = PERISCOPE_DEPTH
+		elif depth > SURFACE_FLOAT_DEPTH:
+			# Stage 2: Between periscope and float depth - let buoyancy take over
+			# Target slightly above float depth to allow natural settling
+			effective_target_depth = SURFACE_FLOAT_DEPTH + 0.5
+		else:
+			# Stage 3: At surface - maintain float depth
+			effective_target_depth = SURFACE_FLOAT_DEPTH
+	
+	# If target depth is deeper than current, exit surface mode immediately
+	if target_depth > depth + 5.0:
+		surface_mode = false
+		effective_target_depth = target_depth
 
 	# Calculate current heading
 	var current_heading = CoordinateSystem.calculate_heading(forward_dir)
@@ -300,17 +392,118 @@ func update_physics(delta: float) -> void:
 		submarine_body.apply_torque(Vector3(0, steering_torque, 0))
 
 	# Step 7: Calculate and apply dive plane torques - Requirement 12.1
-	var current_pitch = submarine_body.rotation.x
+	var current_pitch = _get_local_pitch()  # Use local pitch instead of world Euler angle
 	var vertical_velocity = velocity.y
 	var pitch_angular_velocity = submarine_body.angular_velocity.x
-	var dive_plane_torque = dive_plane_system.calculate_dive_plane_torque(
-		depth, target_depth, vertical_velocity, effective_speed_for_planes, rad_to_deg(current_pitch), pitch_angular_velocity
-	)
 	
-	# Debug: Log heading-dependent pitch behavior
+	var ascent_rate = -vertical_velocity  # Positive = ascending
+	var descent_rate = vertical_velocity  # Positive = descending
+	var pitch_deg = rad_to_deg(current_pitch)
+	
+	# ABSOLUTE HARD PITCH LIMIT - submarines should NEVER exceed ~20° pitch
+	# Real submarines rarely exceed 15° even in emergency maneuvers
+	const ABSOLUTE_MAX_PITCH: float = 20.0
+	
+	# S-CURVE DEPTH CONTROL for ALL depth changes
+	# Key insight: limit pitch based on distance to target, not just surface
+	# This creates smooth approaches to ANY target depth
+	
+	var dive_plane_torque = 0.0
+	var is_surfacing = effective_target_depth < 5.0
+	var depth_error = effective_target_depth - depth
+	var distance_to_target = abs(depth_error)
+	var is_ascending = depth_error < 0  # Need to go up
+	var is_descending = depth_error > 0  # Need to go down
+	
+	# Calculate maximum allowed pitch based on distance to target
+	# The closer we are, the more level we need to be (S-curve approach)
+	var max_pitch_for_depth = 12.0  # Default cruise pitch (reduced from 15)
+	
+	if distance_to_target < 10.0:
+		max_pitch_for_depth = 3.0  # Very close - almost level
+	elif distance_to_target < 25.0:
+		max_pitch_for_depth = 5.0  # Approaching - gentle
+	elif distance_to_target < 50.0:
+		max_pitch_for_depth = 8.0  # Getting close - moderate
+	elif distance_to_target < 100.0:
+		max_pitch_for_depth = 10.0  # Mid-range
+	else:
+		max_pitch_for_depth = 12.0  # Far away - still limited
+	
+	# Extra restriction when surfacing (water surface is hard boundary)
+	if is_surfacing:
+		if depth < 10.0:
+			max_pitch_for_depth = min(max_pitch_for_depth, 3.0)
+		elif depth < 25.0:
+			max_pitch_for_depth = min(max_pitch_for_depth, 5.0)
+	
+	# HARD PITCH LIMITER - ALWAYS ACTIVE regardless of depth control phase
+	# This is a safety system that overrides everything else
+	if abs(pitch_deg) > ABSOLUTE_MAX_PITCH:
+		# EMERGENCY: Pitch is dangerously high - apply maximum corrective torque
+		var emergency_overshoot = abs(pitch_deg) - ABSOLUTE_MAX_PITCH
+		var emergency_strength = 50000000.0 * (1.0 + emergency_overshoot / 5.0)  # Very aggressive
+		
+		dive_plane_torque = -sign(pitch_deg) * emergency_overshoot * emergency_strength
+		dive_plane_torque += -pitch_angular_velocity * 30000000.0  # Strong damping
+		dive_plane_torque = clamp(dive_plane_torque, -150000000.0, 150000000.0)
+		
+		if debug_mode:
+			print("[EMERGENCY PITCH] %.1f° exceeds limit! Applying %.0f Nm correction" % [pitch_deg, dive_plane_torque])
+	
+	# PROACTIVE PITCH LIMITING for all depth changes (kicks in earlier than emergency)
+	elif abs(pitch_deg) > max_pitch_for_depth:
+		var pitch_overshoot = abs(pitch_deg) - max_pitch_for_depth
+		var correction_strength = 40000000.0 * (1.0 + pitch_overshoot / 5.0)  # Increased strength
+		
+		# Apply correction torque to reduce pitch
+		dive_plane_torque = -sign(pitch_deg) * pitch_overshoot * correction_strength
+		
+		# Add strong damping to prevent oscillation
+		dive_plane_torque += -pitch_angular_velocity * 25000000.0
+		
+		dive_plane_torque = clamp(dive_plane_torque, -120000000.0, 120000000.0)
+	else:
+		# Normal S-curve control from dive_plane_system
+		dive_plane_torque = dive_plane_system.calculate_dive_plane_torque(
+			depth, effective_target_depth, vertical_velocity, effective_speed_for_planes, 
+			pitch_deg, pitch_angular_velocity, max_pitch_for_depth
+		)
+	
+	# AT TARGET DEPTH: Actively level the submarine (pitch -> 0°)
+	# This ensures we don't maintain any pitch once we've reached desired depth
+	if distance_to_target < 5.0:
+		# We're at target depth - force pitch to zero
+		var level_torque = -current_pitch * 40000000.0  # Strong leveling
+		level_torque += -pitch_angular_velocity * 20000000.0  # Damping
+		dive_plane_torque = level_torque  # Override other commands
+	
+	# VELOCITY-BASED APPROACH CONTROL - slow down when approaching target
+	# Ascending fast toward target
+	elif is_ascending and distance_to_target < 50.0 and ascent_rate > 1.5:
+		var approach_strength = (ascent_rate / 3.0) * ((50.0 - distance_to_target) / 50.0)
+		var approach_torque = -current_pitch * 25000000.0 * approach_strength
+		approach_torque += -pitch_angular_velocity * 15000000.0 * approach_strength
+		dive_plane_torque += approach_torque
+	# Descending fast toward target  
+	elif is_descending and distance_to_target < 50.0 and descent_rate > 1.5:
+		var approach_strength = (descent_rate / 3.0) * ((50.0 - distance_to_target) / 50.0)
+		var approach_torque = -current_pitch * 25000000.0 * approach_strength
+		approach_torque += -pitch_angular_velocity * 15000000.0 * approach_strength
+		dive_plane_torque += approach_torque
+	
+	# AT SURFACE: Maximum leveling - dive planes are ineffective above water
+	if depth < 3.0:
+		dive_plane_torque = -current_pitch * 80000000.0
+		dive_plane_torque += -pitch_angular_velocity * 30000000.0
+	
+	# Debug: Log depth control behavior
 	if debug_mode and Engine.get_process_frames() % 120 == 0:
-		print("[PITCH DEBUG] heading=%.0f° pitch=%.1f° fwd=%.1f eff=%.1f m/s depth=%.1f->%.1f torque=%.0f" % [
-			current_heading, rad_to_deg(current_pitch), forward_speed, effective_speed_for_planes, depth, target_depth, dive_plane_torque
+		var mode_str = "SURFACE" if surface_mode else "DIVE"
+		var direction_str = "ASC" if is_ascending else ("DESC" if is_descending else "HOLD")
+		var at_depth_str = " [AT DEPTH]" if distance_to_target < 5.0 else ""
+		print("[PITCH DEBUG] %s %s dist=%.0fm pitch=%.1f° maxPitch=%.0f° fwd=%.1f m/s depth=%.1fm torque=%.0f Nm%s" % [
+			mode_str, direction_str, distance_to_target, rad_to_deg(current_pitch), max_pitch_for_depth, forward_speed, depth, dive_plane_torque, at_depth_str
 		])
 	
 	# Log excessive torques
@@ -328,19 +521,46 @@ func update_physics(delta: float) -> void:
 	# Roll stabilization - submarines have natural righting moment due to ballast tanks
 	# Two components: (1) righting torque proportional to roll angle, (2) damping proportional to angular velocity
 	var local_roll_axis = submarine_body.global_transform.basis.z
-	var current_roll = submarine_body.rotation.z  # Roll angle in radians
+	var current_roll = _get_local_roll()  # Use local roll instead of world Euler angle
 	var roll_angular_velocity = submarine_body.angular_velocity.dot(local_roll_axis)
 
-	# Righting torque - pushes sub back to level (like a ship's metacentric height)
-	var roll_righting_coefficient = 8000000.0  # Strong righting moment
+	# Base righting torque - pushes sub back to level (like a ship's metacentric height)
+	var roll_righting_coefficient = 25000000.0  # TASK-001: Increased from 8M to overcome ~100M kg·m² inertia
+	
+	# CRITICAL: Increase roll stabilization during aggressive pitch maneuvers
+	# When dive planes are near max deflection, roll stability is compromised
+	var abs_pitch_deg = abs(pitch_deg)  # Use pitch_deg from dive plane section above
+	if abs_pitch_deg > 10.0:  # Aggressive pitch maneuver
+		# Boost roll stabilization proportionally to pitch angle
+		var pitch_factor = 1.0 + (abs_pitch_deg / 15.0) * 2.0  # Up to 3x stronger at 15° pitch
+		roll_righting_coefficient *= pitch_factor
+	
+	# During ascent/descent, further boost roll stabilization
+	if abs(vertical_velocity) > 0.5:  # Significant vertical motion
+		var velocity_factor = 1.0 + min(abs(vertical_velocity) / 2.0, 1.5)  # Up to 2.5x stronger
+		roll_righting_coefficient *= velocity_factor
+	
 	var roll_righting_torque = -current_roll * roll_righting_coefficient
 
-	# Damping torque - prevents oscillation
-	var roll_damping_coefficient = 6000000.0  # Strong damping
+	# Damping torque - prevents oscillation (also boosted during maneuvers)
+	var roll_damping_coefficient = 6000000.0  # Base damping
+	if abs_pitch_deg > 10.0 or abs(vertical_velocity) > 0.5:
+		roll_damping_coefficient *= 2.0  # Double damping during maneuvers
 	var roll_damping_torque = -roll_angular_velocity * roll_damping_coefficient
 
 	# Apply combined roll correction
 	submarine_body.apply_torque(local_roll_axis * (roll_righting_torque + roll_damping_torque))
+	
+	# SURFACE ROLL LEVELING: Also force roll to 0° when at surface
+	# Submarines float level in water - both pitch AND roll should be zero
+	if depth < 5.0:
+		var surface_roll_strength = (5.0 - depth) / 5.0  # 0.0 at 5m, 1.0 at surface
+		var surface_roll_torque = -current_roll * 10000000.0 * surface_roll_strength
+		submarine_body.apply_torque(local_roll_axis * surface_roll_torque)
+		
+		# Damp roll angular velocity at surface
+		var roll_damping_at_surface = -roll_angular_velocity * 8000000.0 * surface_roll_strength
+		submarine_body.apply_torque(local_roll_axis * roll_damping_at_surface)
 	
 	# Manual pitch damping to prevent oscillation (use local X axis)
 	# With torque_coefficient at 1500, we need proportional damping
@@ -353,10 +573,10 @@ func update_physics(delta: float) -> void:
 	# LOW-SPEED PITCH ASSIST: When moving slowly, use ballast-induced pitch for depth control
 	# Real subs use trim tanks to adjust pitch at low speeds - simulate this
 	if abs(forward_speed) < 2.0:  # Low speed threshold
-		var depth_error = target_depth - depth
+		var low_speed_depth_error = target_depth - depth
 		# For ascending (depth_error < 0), pitch nose up slightly to help
 		# For descending (depth_error > 0), pitch nose down slightly
-		var desired_pitch_for_depth = -depth_error * 0.01  # Subtle pitch per meter of depth error
+		var desired_pitch_for_depth = -low_speed_depth_error * 0.01  # Subtle pitch per meter of depth error
 		desired_pitch_for_depth = clamp(desired_pitch_for_depth, -0.15, 0.15)  # Max ~8.5 degrees
 
 		var pitch_error_for_assist = desired_pitch_for_depth - current_pitch
@@ -368,31 +588,53 @@ func update_physics(delta: float) -> void:
 	
 	# SAFETY: Hard pitch angle limiter - prevent submarine from going vertical
 	# Clamp pitch to ±30° maximum (anything more is catastrophic for crew)
-	var current_pitch_deg = rad_to_deg(current_pitch)
+	var current_pitch_deg = rad_to_deg(current_pitch)  # Already using local pitch
 	
 	# Get local pitch axis for remaining operations
 	var local_pitch_axis_for_safety = submarine_body.global_transform.basis.x
 	
 	# SURFACE LEVELING: Force pitch to 0° when at/near surface
-	# Only apply strong leveling when VERY close to surface (< 0.5m)
-	if depth < 0.5:  # Within 50cm of surface
-		var surface_level_strength = (0.5 - depth) / 0.5  # 1.0 at surface, 0.0 at 0.5m
-		var level_torque = -current_pitch * 3000000.0 * surface_level_strength
+	# Progressive leveling starts at 10m depth, becomes very strong at surface
+	if depth < 10.0:
+		var surface_level_strength: float
+		
+		if depth < 1.0:
+			# Very close to surface (< 1m): Maximum leveling force
+			surface_level_strength = 1.0
+		else:
+			# 1-10m: Progressive increase (0.0 at 10m, 1.0 at 1m)
+			surface_level_strength = (10.0 - depth) / 9.0
+		
+		# Strong righting torque proportional to pitch angle
+		# Use much higher coefficient for surface leveling
+		var level_torque = -current_pitch * 15000000.0 * surface_level_strength
 		submarine_body.apply_torque(local_pitch_axis_for_safety * level_torque)
-		# Reduce pitch angular velocity in local frame
+		
+		# Aggressively damp pitch angular velocity at surface
 		var local_pitch_vel = submarine_body.angular_velocity.dot(local_pitch_axis_for_safety)
-		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel * surface_level_strength * 0.8
+		var damping_strength = surface_level_strength * 0.95  # Near-complete damping at surface
+		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel * damping_strength
+		
+		# At surface (< 0.5m), physically snap to level if pitch is extreme
+		if depth < 0.5 and abs(current_pitch) > deg_to_rad(10.0):
+			# Emergency level: Directly reduce pitch angle
+			var target_basis = Basis()
+			target_basis = target_basis.rotated(Vector3.UP, submarine_body.rotation.y)  # Preserve heading
+			submarine_body.global_transform.basis = submarine_body.global_transform.basis.slerp(target_basis, 0.3)
+			# Zero pitch velocity
+			submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel
 	
 	if abs(current_pitch_deg) > MAX_SAFE_PITCH:
-		# Force pitch back within limits by applying strong counter-torque
+		# EMERGENCY: Force pitch back within limits immediately
 		var pitch_overshoot = abs(current_pitch_deg) - MAX_SAFE_PITCH
-		var correction_torque = -sign(current_pitch) * pitch_overshoot * 500000.0
+		# Use VERY strong correction - this is a hard safety limit
+		var correction_torque = -sign(current_pitch) * pitch_overshoot * 50000000.0  # 100x stronger
 		submarine_body.apply_torque(local_pitch_axis_for_safety * correction_torque)
-		# Also zero out angular velocity in pitch axis to stop rotation
+		# Aggressively damp pitch rotation
 		var local_pitch_vel = submarine_body.angular_velocity.dot(local_pitch_axis_for_safety)
-		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel
-		if debug_mode:
-			print("[SAFETY] Pitch limiter engaged: %.1f° -> clamping to %.1f°" % [current_pitch_deg, MAX_SAFE_PITCH * sign(current_pitch_deg)])
+		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel * 0.8  # 80% damping
+		if debug_mode or abs(current_pitch_deg) > 25.0:  # Always warn if very extreme
+			print("[SAFETY] Pitch limiter engaged: %.1f° exceeds %.1f° limit! Correcting..." % [current_pitch_deg, MAX_SAFE_PITCH])
 
 	# Step 7b: Calculate and apply hull lift forces (from pitch angle + forward speed)
 	var hull_lift_force = hull_lift_system.calculate_hull_lift_with_damping(
@@ -422,9 +664,13 @@ func update_physics(delta: float) -> void:
 				])
 
 	# Step 8: Calculate and apply ballast forces - Requirement 12.1
+	# In surface mode, use reduced ballast to allow natural floating
 	var ballast_force = ballast_system.calculate_ballast_force(
-		depth, target_depth, vertical_velocity, delta
+		depth, effective_target_depth, vertical_velocity, delta
 	)
+	if surface_mode:
+		ballast_force *= 0.3  # Reduce ballast effectiveness at surface
+	
 	if is_finite(ballast_force):
 		submarine_body.apply_central_force(Vector3(0, -ballast_force, 0))  # Negative because ballast is positive down
 
@@ -531,6 +777,26 @@ func get_available_classes() -> Array[String]:
 	for key in SUBMARINE_CLASSES.keys():
 		classes.append(key)
 	return classes
+
+
+## Level submarine - dampen pitch and roll motion
+func level_submarine() -> void:
+	if submarine_body:
+		var angular_vel = submarine_body.angular_velocity
+		# Aggressively dampen pitch (X) and roll (Z) rotation
+		submarine_body.angular_velocity = Vector3(
+			angular_vel.x * 0.3,  # Dampen pitch
+			angular_vel.y,        # Keep yaw unchanged
+			angular_vel.z * 0.3   # Dampen roll
+		)
+		print("SubmarinePhysicsV2: Leveling submarine - dampened pitch and roll")
+
+
+## Reset ballast system trim
+func reset_ballast_trim() -> void:
+	if ballast_system:
+		ballast_system.reset_pid_state()
+		print("SubmarinePhysicsV2: Ballast trim reset")
 
 
 ## Add appendage drag contribution

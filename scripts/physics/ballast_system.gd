@@ -73,9 +73,21 @@ func calculate_ballast_force(
 	# Requirement 8.4: Calculate desired depth rate from depth error
 	# Positive error (need to go deeper) = positive rate (descending)
 	# Negative error (need to go shallower) = negative rate (ascending)
+	
+	# PREDICTIVE: Estimate where we'll be in 2 seconds
+	var prediction_time = 2.0
+	var predicted_depth = current_depth + (vertical_velocity * prediction_time)
+	var predicted_error = target_depth - predicted_depth
+	
+	# Use predicted error to calculate desired rate - this prevents overshoot
 	var desired_depth_rate: float = clamp(
-		effective_error * depth_rate_gain, -max_depth_rate, max_depth_rate
+		predicted_error * depth_rate_gain, -max_depth_rate, max_depth_rate
 	)
+	
+	# If we're already moving in the right direction and will reach target, reduce command
+	if abs(predicted_error) < abs(effective_error) * 0.5:
+		# We're on track to reach target - reduce desired rate to prevent overshoot
+		desired_depth_rate *= (abs(predicted_error) / max(abs(effective_error), 0.1))
 
 	# Calculate rate error
 	# Vertical velocity is positive when descending, which matches our convention
@@ -89,7 +101,7 @@ func calculate_ballast_force(
 		depth_error_integral = clamp(depth_error_integral, -max_integral, max_integral)
 
 	# Calculate derivative term
-	var derivative: float = 0.0
+	
 	if delta > 0.0:
 		derivative = (effective_error - last_depth_error) / delta
 	last_depth_error = effective_error
@@ -121,7 +133,7 @@ func reset_pid_state() -> void:
 	last_ballast_force = 0.0
 
 
-## Update configuration parameters
+var derivative: float = 0.0## Update configuration parameters
 func configure(config: Dictionary) -> void:
 	if config.has("max_ballast_force"):
 		max_ballast_force = config.max_ballast_force

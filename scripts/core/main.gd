@@ -92,12 +92,13 @@ func _create_submarine_body() -> void:
 
 	# Position submarine in safe water location using terrain data
 	if terrain_renderer and terrain_renderer.initialized:
-		var safe_position = terrain_renderer.find_safe_spawn_position(Vector3.ZERO, 1000.0, -50.0)
+		# Use -500m as minimum safe depth for real-world scale ocean
+		var safe_position = terrain_renderer.find_safe_spawn_position(Vector3.ZERO, 1000.0, -500.0)
 		submarine_body.global_position = safe_position
 		print("Submarine spawned at safe position: ", safe_position)
 	else:
 		# Fallback to default depth if terrain not ready
-		submarine_body.global_position = Vector3(0, -50, 0)
+		submarine_body.global_position = Vector3(0, -500, 0)
 		print("Submarine spawned at default position (terrain not ready)")
 
 	print("Submarine body initialized - mass=%.0f kg" % submarine_body.mass)
