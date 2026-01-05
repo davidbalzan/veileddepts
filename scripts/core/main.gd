@@ -5,6 +5,8 @@ extends Node
 
 # Preload physics class (V2 - component-based architecture)
 const SubmarinePhysicsClass = preload("res://scripts/physics/submarine_physics_v2.gd")
+const SubmarineMetricsPanelClass = preload("res://scripts/ui/submarine_metrics_panel.gd")
+const BlackBoxLoggerClass = preload("res://scripts/debug/black_box_logger.gd")
 
 # References to core systems
 @onready var view_manager: Node = $ViewManager
@@ -21,6 +23,9 @@ var ocean_renderer: OceanRenderer
 # Physics and rendering systems
 var submarine_physics: Node  # SubmarinePhysics instance
 var submarine_body: RigidBody3D
+
+# Debug systems
+var black_box: Node  # BlackBoxLogger
 
 
 func _ready() -> void:
@@ -57,6 +62,12 @@ func _initialize_systems() -> void:
 
 	# Initialize AI system
 	_setup_ai_system()
+	
+	# Setup black box logger
+	_setup_black_box_logger()
+	
+	# Create submarine metrics panel
+	_setup_metrics_panel()
 
 	print("All systems initialized")
 
@@ -69,6 +80,9 @@ func _create_submarine_body() -> void:
 		push_error("SubmarineModel not found in scene!")
 		return
 
+	# Enforce axis locks to prevent roll
+	submarine_body.axis_lock_angular_z = true
+	
 	# Add collision shape
 	var collision_shape = submarine_body.get_node_or_null("CollisionShape3D")
 	if collision_shape and not collision_shape.shape:
@@ -208,6 +222,15 @@ func _spawn_demo_patrol() -> void:
 	print("Demo air patrol spawned")
 
 
+func _setup_black_box_logger() -> void:
+	# Setup black box flight recorder for debugging
+	black_box = BlackBoxLoggerClass.new()
+	black_box.name = "BlackBoxLogger"
+	add_child(black_box)
+	black_box.log_event("System initialized")
+	print("BlackBox logger started: ", black_box.get_log_path())
+
+
 func _ensure_ocean_camera() -> void:
 	"""Ensure the ocean renderer has a camera for wave height queries"""
 	if not ocean_renderer:
@@ -250,6 +273,18 @@ func _physics_process(delta: float) -> void:
 				physics_state["heading"],
 				physics_state["speed"]
 			)
+			
+			# Log to black box periodically
+			if black_box:
+				var pitch_deg = rad_to_deg(submarine_body.rotation.x)
+				var v_vel = submarine_body.linear_velocity.y
+				black_box.log_state(
+					physics_state["depth"],
+					pitch_deg,
+					physics_state["heading"],
+					physics_state["speed"],
+					v_vel
+				)
 
 		# Update ocean renderer camera reference (only if in a 3D view)
 		if (
@@ -275,6 +310,35 @@ func _update_ocean_camera() -> void:
 	else:
 		# Don't unset it, keep the last good one to avoid null pointer errors in some ocean versions
 		pass
+
+
+func _setup_metrics_panel() -> void:
+	# Create and setup submarine metrics panel
+	var canvas_layer = CanvasLayer.new()
+	canvas_layer.name = "SubmarineMetricsPanel"
+	canvas_layer.layer = 5
+	add_child(canvas_layer)
+	print("Main: Created CanvasLayer for metrics panel")
+	
+	var metrics_panel = SubmarineMetricsPanelClass.new()
+	metrics_panel.name = "Panel"
+	
+	# Position at bottom center
+	metrics_panel.anchor_left = 0.5
+	metrics_panel.anchor_top = 1.0
+	metrics_panel.anchor_right = 0.5
+	metrics_panel.anchor_bottom = 1.0
+	metrics_panel.offset_left = -425  # Half of 850px width
+	metrics_panel.offset_top = -170  # 150px height + 20px margin
+	metrics_panel.offset_right = 425
+	metrics_panel.offset_bottom = -20
+	metrics_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	metrics_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	
+	canvas_layer.add_child(metrics_panel)
+	
+	print("Main: Submarine metrics panel created (press M to toggle)")
+	print("Main: Panel visible=", metrics_panel.visible, " position=", metrics_panel.position, " size=", metrics_panel.size)
 
 
 func _manage_3d_visibility() -> void:

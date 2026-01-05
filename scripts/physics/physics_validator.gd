@@ -56,25 +56,30 @@ func validate_and_fix_submarine_state(body: RigidBody3D) -> bool:
 
 
 ## Clamps velocity magnitude to maximum speed (110% of max_speed)
-## Preserves velocity direction while limiting magnitude
+## Only clamps horizontal velocity to allow vertical movement
 func clamp_velocity(body: RigidBody3D, max_speed: float) -> void:
 	var velocity: Vector3 = body.linear_velocity
-	var speed: float = velocity.length()
+	
+	# Separate horizontal and vertical components
+	var horizontal_vel = Vector2(velocity.x, velocity.z)
+	var vertical_vel = velocity.y
+	var horizontal_speed = horizontal_vel.length()
 
-	# Allow 110% of max speed before clamping
+	# Allow 110% of max speed before clamping ONLY horizontal
 	var clamp_threshold: float = max_speed * 1.1
 
-	if speed > clamp_threshold:
+	if horizontal_speed > clamp_threshold:
 		# Only log if significantly over limit (120%)
-		if speed > max_speed * 1.2:
+		if horizontal_speed > max_speed * 1.2:
 			_log_error_throttled(
 				"velocity_clamp",
-				"Velocity clamped from %.2f to %.2f m/s" % [speed, clamp_threshold]
+				"Horizontal velocity clamped from %.2f to %.2f m/s" % [horizontal_speed, clamp_threshold]
 			)
 
-		# Normalize and scale to clamp threshold
-		if speed > 0.001:  # Avoid division by zero
-			body.linear_velocity = velocity.normalized() * clamp_threshold
+		# Normalize and scale horizontal only
+		if horizontal_speed > 0.001:  # Avoid division by zero
+			horizontal_vel = horizontal_vel.normalized() * clamp_threshold
+			body.linear_velocity = Vector3(horizontal_vel.x, vertical_vel, horizontal_vel.y)
 
 
 ## Enforces map boundaries at ±boundary meters from origin

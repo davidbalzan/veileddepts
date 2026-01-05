@@ -34,6 +34,7 @@ var _cache_frame: int = -1
 var mass: float = 8000.0  # tons
 var max_speed: float = 10.3  # m/s (20 knots)
 var max_depth: float = 400.0  # meters
+const MAX_SAFE_PITCH: float = 30.0  # Maximum pitch angle in degrees (safety limit)
 # Note: map_boundary removed - dynamic terrain streaming allows unlimited exploration
 
 # Debug mode (Requirement 14.1)
@@ -164,7 +165,7 @@ func _instantiate_components() -> void:
 	rudder_system.log_callback = _log_debug
 
 	# Create dive plane system
-	dive_plane_system = DivePlaneSystem.new({"torque_coefficient": 1000000.0})
+	dive_plane_system = DivePlaneSystem.new({"torque_coefficient": 1500.0})
 
 	# Create ballast system
 	ballast_system = BallastSystem.new({"max_ballast_force": 50000000.0})
@@ -219,7 +220,42 @@ func update_physics(delta: float) -> void:
 	# Get current state for calculations
 	var position = submarine_body.global_position
 	var velocity = submarine_body.linear_velocity
-	var depth = -position.y  # Depth is negative Y
+	
+	# CRITICAL FIX: Depth must be calculated relative to ACTUAL ocean surface, not just -Y
+	# The ocean renderer's Y position IS the sea surface
+	var sea_surface_y = 0.0
+	if ocean_renderer:
+		sea_surface_y = ocean_renderer.get_wave_height_3d(position)
+	else:
+		# Fallback: use ocean_renderer node Y position if wave height unavailable
+		var ocean_node = get_tree().root.get_node_or_null("Main/OceanRenderer")
+		if ocean_node:
+			sea_surface_y = ocean_node.global_position.y
+	
+	var depth = sea_surface_y - position.y  # Depth = how far below surface
+	depth = max(0.0, depth)  # Clamp to surface - can't fly above water!
+	
+	# Debug logging every 2 seconds
+	if debug_mode and Engine.get_process_frames() % 120 == 0:
+		print("[DEPTH DEBUG] pos.y=%.2f, sea_y=%.2f, depth=%.2f" % [position.y, sea_surface_y, depth])
+	
+	# CRITICAL: When at surface, submarine should be partially submerged, not flying
+	# The submarine's pivot is at its center, so when "at surface" the center should be
+	# at the waterline (Y = wave_height). This makes the conning tower visible above water.
+	if depth <= 0.5 and ocean_renderer:  # At or very near surface
+		var ocean_surface_y = ocean_renderer.get_wave_height_3d(position)
+		# Target position: submarine center at waterline (so ~half hull is submerged)
+		var target_y = ocean_surface_y
+		var y_error = position.y - target_y
+		
+		if abs(y_error) > 0.2:  # More than 20cm off target
+			# Smoothly move toward correct position (not instant snap)
+			position.y = lerp(position.y, target_y, 0.1)
+			submarine_body.global_position = position
+			# Dampen vertical velocity when correcting
+			velocity.y *= 0.8
+			submarine_body.linear_velocity = velocity
+	
 	var forward_speed = velocity.dot(forward_dir)
 
 	# Get control inputs from simulation state
@@ -264,11 +300,72 @@ func update_physics(delta: float) -> void:
 	# Step 7: Calculate and apply dive plane torques - Requirement 12.1
 	var current_pitch = submarine_body.rotation.x
 	var vertical_velocity = velocity.y
+	var pitch_angular_velocity = submarine_body.angular_velocity.x
 	var dive_plane_torque = dive_plane_system.calculate_dive_plane_torque(
-		depth, target_depth, vertical_velocity, abs(forward_speed), rad_to_deg(current_pitch)
+		depth, target_depth, vertical_velocity, abs(forward_speed), rad_to_deg(current_pitch), pitch_angular_velocity
 	)
+	
+	# Debug: Log heading-dependent pitch behavior
+	if debug_mode and Engine.get_process_frames() % 120 == 0:
+		print("[PITCH DEBUG] heading=%.0f° pitch=%.1f° fwd_spd=%.1f m/s tgt_depth=%.1f cur_depth=%.1f torque=%.0f Nm" % [
+			current_heading, rad_to_deg(current_pitch), forward_speed, target_depth, depth, dive_plane_torque
+		])
+	
+	# Log excessive torques
+	if abs(dive_plane_torque) > 10000000.0:  # > 10M Nm
+		print("[TORQUE WARNING] Excessive dive plane torque: %.0f Nm (speed=%.1f, pitch=%.1f°)" % [
+			dive_plane_torque, forward_speed, rad_to_deg(current_pitch)
+		])
+	
+	# CRITICAL FIX: Apply torque in LOCAL coordinates, not world coordinates!
+	# The submarine's local X-axis is the pitch axis regardless of heading
+	var local_pitch_axis = submarine_body.global_transform.basis.x
 	if is_finite(dive_plane_torque):
-		submarine_body.apply_torque(Vector3(dive_plane_torque, 0, 0))
+		submarine_body.apply_torque(local_pitch_axis * dive_plane_torque)
+	
+	# Manual roll damping - axis lock isn't preventing roll!
+	# Apply counter-torque to kill any roll motion (use local Z axis)
+	var roll_damping_coefficient = 5000000.0  # Strong damping for roll (keep roll locked)
+	var local_roll_axis = submarine_body.global_transform.basis.z
+	var roll_angular_velocity = submarine_body.angular_velocity.dot(local_roll_axis)
+	var roll_damping_torque = -roll_angular_velocity * roll_damping_coefficient
+	submarine_body.apply_torque(local_roll_axis * roll_damping_torque)
+	
+	# Manual pitch damping to prevent oscillation (use local X axis)
+	# With torque_coefficient at 1500, we need proportional damping
+	# Target: critical damping for smooth pitch response without oscillation
+	var pitch_damping_coefficient = 300000.0  # Proportional to current torque coefficient
+	var local_pitch_angular_velocity = submarine_body.angular_velocity.dot(local_pitch_axis)
+	var pitch_damping_torque = -local_pitch_angular_velocity * pitch_damping_coefficient
+	submarine_body.apply_torque(local_pitch_axis * pitch_damping_torque)
+	
+	# SAFETY: Hard pitch angle limiter - prevent submarine from going vertical
+	# Clamp pitch to ±30° maximum (anything more is catastrophic for crew)
+	var current_pitch_deg = rad_to_deg(current_pitch)
+	
+	# Get local pitch axis for remaining operations
+	var local_pitch_axis_for_safety = submarine_body.global_transform.basis.x
+	
+	# SURFACE LEVELING: Force pitch to 0° when at/near surface
+	# Only apply strong leveling when VERY close to surface (< 0.5m)
+	if depth < 0.5:  # Within 50cm of surface
+		var surface_level_strength = (0.5 - depth) / 0.5  # 1.0 at surface, 0.0 at 0.5m
+		var level_torque = -current_pitch * 3000000.0 * surface_level_strength
+		submarine_body.apply_torque(local_pitch_axis_for_safety * level_torque)
+		# Reduce pitch angular velocity in local frame
+		var local_pitch_vel = submarine_body.angular_velocity.dot(local_pitch_axis_for_safety)
+		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel * surface_level_strength * 0.8
+	
+	if abs(current_pitch_deg) > MAX_SAFE_PITCH:
+		# Force pitch back within limits by applying strong counter-torque
+		var pitch_overshoot = abs(current_pitch_deg) - MAX_SAFE_PITCH
+		var correction_torque = -sign(current_pitch) * pitch_overshoot * 500000.0
+		submarine_body.apply_torque(local_pitch_axis_for_safety * correction_torque)
+		# Also zero out angular velocity in pitch axis to stop rotation
+		var local_pitch_vel = submarine_body.angular_velocity.dot(local_pitch_axis_for_safety)
+		submarine_body.angular_velocity -= local_pitch_axis_for_safety * local_pitch_vel
+		if debug_mode:
+			print("[SAFETY] Pitch limiter engaged: %.1f° -> clamping to %.1f°" % [current_pitch_deg, MAX_SAFE_PITCH * sign(current_pitch_deg)])
 
 	# Step 7b: Calculate and apply hull lift forces (from pitch angle + forward speed)
 	var hull_lift_force = hull_lift_system.calculate_hull_lift_with_damping(
@@ -276,6 +373,26 @@ func update_physics(delta: float) -> void:
 	)
 	if physics_validator.validate_vector(hull_lift_force, "hull_lift_force"):
 		submarine_body.apply_central_force(hull_lift_force)
+		
+		# Log forces to black box and console every second
+		if Engine.get_process_frames() % 60 == 0:
+			var main = get_tree().root.get_node_or_null("Main")
+			if main and main.has_node("BlackBoxLogger"):
+				var bb = main.get_node("BlackBoxLogger")
+				var buoy_y = buoyancy_result.force.y if buoyancy_result else 0.0
+				bb.log_forces(hull_lift_force.y, buoy_y, dive_plane_torque)
+				# Detailed console output with rotation and torques
+				var rot = submarine_body.rotation_degrees
+				var ang_vel = submarine_body.angular_velocity
+				print("[PHYSICS] spd=%.1f pitch=%.1f° roll=%.1f° | lift=%.0fN buoy=%.0fN" % [
+					abs(forward_speed), rot.x, rot.z,
+					hull_lift_force.y, buoy_y
+				])
+				print("[TORQUE] dive=%.0f steer=%.0f buoy=(%.1f,%.1f,%.1f) angvel=(%.2f,%.2f,%.2f)" % [
+					dive_plane_torque, steering_torque,
+					buoyancy_result.torque.x, buoyancy_result.torque.y, buoyancy_result.torque.z,
+					ang_vel.x, ang_vel.y, ang_vel.z
+				])
 
 	# Step 8: Calculate and apply ballast forces - Requirement 12.1
 	var ballast_force = ballast_system.calculate_ballast_force(

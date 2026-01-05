@@ -29,8 +29,9 @@ const MAX_ELEVATION: float = 100.0    # Mission area maximum (meters)
 const MARIANA_TRENCH_DEPTH: float = -10994.0  # Lowest point on Earth (meters)
 const MOUNT_EVEREST_HEIGHT: float = 8849.0    # Highest point on Earth (meters)
 
-# Default sea level - calibrated value that matches real-world coastlines
-const DEFAULT_SEA_LEVEL: float = 0.562  # Normalized value for accurate coastline representation
+# Default sea level - calibrated for mission area range
+# Sea level at 0m = (0 - MIN_ELEVATION) / (MAX_ELEVATION - MIN_ELEVATION) = 200/300 = 0.667
+const DEFAULT_SEA_LEVEL: float = 0.667  # Normalized value for 0m sea level in mission area
 
 # Performance constants
 const UPDATE_THROTTLE_MS: float = 100.0  # Minimum time between updates (milliseconds)
@@ -115,17 +116,35 @@ func reset_to_default() -> void:
 	set_sea_level(DEFAULT_SEA_LEVEL)
 
 
-## Convert normalized elevation (0.0-1.0) to meters
+## Convert normalized elevation (0.0-1.0) to meters for mission area
+## Uses mission area range (-200m to +100m) for in-game positioning
 ## @param normalized: Elevation in normalized range (0.0-1.0)
 ## @return: Elevation in meters
 func normalized_to_meters(normalized: float) -> float:
-	return lerp(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, normalized)
+	return lerp(MIN_ELEVATION, MAX_ELEVATION, normalized)
 
 
 ## Convert elevation in meters to normalized (0.0-1.0)
+## Uses mission area range (-200m to +100m) for in-game positioning
 ## @param meters: Elevation in meters
 ## @return: Elevation in normalized range (0.0-1.0)
 func meters_to_normalized(meters: float) -> float:
+	return inverse_lerp(MIN_ELEVATION, MAX_ELEVATION, meters)
+
+
+## Convert normalized elevation to global Earth meters (for world map visualization)
+## Uses global range (Mariana Trench to Mount Everest)
+## @param normalized: Elevation in normalized range (0.0-1.0)
+## @return: Elevation in meters (global Earth scale)
+func normalized_to_global_meters(normalized: float) -> float:
+	return lerp(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, normalized)
+
+
+## Convert global Earth meters to normalized (for world map visualization)
+## Uses global range (Mariana Trench to Mount Everest)
+## @param meters: Elevation in meters (global Earth scale)
+## @return: Elevation in normalized range (0.0-1.0)
+func global_meters_to_normalized(meters: float) -> float:
 	return inverse_lerp(MARIANA_TRENCH_DEPTH, MOUNT_EVEREST_HEIGHT, meters)
 
 

@@ -22,6 +22,7 @@
 [ext_resource type="Script" path="res://scripts/rendering/submarine_wake.gd" id="19_submarine_wake"]
 [ext_resource type="Script" path="res://scripts/ui/dev_console.gd" id="20_dev_console"]
 [ext_resource type="Script" path="res://scripts/debug/terrain_calibration_panel.gd" id="21_terrain_calibration"]
+[ext_resource type="Script" path="res://scripts/ui/submarine_metrics_panel.gd" id="22_metrics_panel"]
 
 [sub_resource type="Environment" id="Environment_eb6dy"]
 background_mode = 1
