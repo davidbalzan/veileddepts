@@ -38,7 +38,8 @@ var default_bindings: Dictionary = {
 	"emergency_stop": [KEY_SPACE],
 	"show_input_config": [KEY_F4],  # Show input configuration UI
 	"toggle_terrain_debug": [KEY_F5],  # Toggle terrain debug overlay
-	"toggle_physics_debug": [KEY_F6]  # Toggle physics debug output
+	"toggle_physics_debug": [KEY_F6],  # Toggle physics debug output
+	"toggle_metrics_panel": [KEY_M]  # Toggle submarine metrics panel
 }
 
 ## Speed and heading control parameters
@@ -178,6 +179,10 @@ func _handle_global_submarine_controls(event: InputEvent) -> bool:
 	elif _is_key_bound_to_action(key_event.keycode, "toggle_physics_debug"):
 		_toggle_physics_debug()
 		return true
+	elif _is_key_bound_to_action(key_event.keycode, "toggle_metrics_panel"):
+		_toggle_metrics_panel()
+		return true
+		return true
 
 	return false
 
@@ -278,6 +283,17 @@ func _toggle_physics_debug() -> void:
 		print("Physics debug: %s (F6 to toggle)" % ("ENABLED" if submarine_physics.debug_mode else "disabled"))
 	else:
 		print("InputSystem: SubmarinePhysicsV2 not found")
+
+
+## Toggle submarine metrics panel (M)
+func _toggle_metrics_panel() -> void:
+	var main = get_parent()
+	var metrics_layer = main.get_node_or_null("SubmarineMetricsPanel")
+	if metrics_layer:
+		metrics_layer.visible = not metrics_layer.visible
+		print("Metrics panel: %s (M to toggle)" % ("VISIBLE" if metrics_layer.visible else "hidden"))
+	else:
+		print("InputSystem: SubmarineMetricsPanel not found")
 
 
 ## Handle view toggle input

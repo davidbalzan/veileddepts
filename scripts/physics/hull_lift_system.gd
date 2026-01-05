@@ -16,13 +16,13 @@ extends Node
 
 ## Reference hull cross-sectional area in m²
 ## Typical submarine: ~50-100m² depending on size
-## Seawolf class: approximately 80m² based on 12m diameter and elliptical cross-section
-@export var hull_reference_area: float = 80.0
+## Increased for more responsive speed-based depth control
+@export var hull_reference_area: float = 150.0
 
 ## Lift coefficient for submarine hull shape
 ## Submarines have lower CL than aircraft wings due to cylindrical shape
-## Typical values: 0.3-0.8 for submarine hulls at moderate angles
-@export var hull_lift_coefficient: float = 0.5
+## Increased for noticeable speed-based ascent/descent
+@export var hull_lift_coefficient: float = 1.2
 
 ## Minimum speed (m/s) for lift to take effect
 ## Below this speed, hull lift is negligible
@@ -51,11 +51,11 @@ func calculate_hull_lift(pitch_angle_rad: float, velocity: Vector3, submarine_ba
 	var dynamic_pressure = 0.5 * WATER_DENSITY * forward_speed * forward_speed
 	var lift_magnitude = dynamic_pressure * hull_reference_area * hull_lift_coefficient * sin(angle_of_attack)
 	
-	# Lift direction is perpendicular to velocity and in the pitch plane
-	# For submarine: lift acts primarily in vertical (world up) direction
-	# But we need to account for roll and yaw
-	var submarine_up = submarine_basis.y
-	var lift_force = submarine_up * lift_magnitude
+	# Lift direction is ALWAYS vertical (world up) to prevent roll-induced spinning
+	# CORRECT PHYSICS: Positive pitch (nose up) creates UPWARD lift
+	# Water flowing under angled hull pushes it UP (like airplane wing)
+	# Negative pitch (nose down) creates downward force
+	var lift_force = Vector3.UP * lift_magnitude  # Nose up = push UP
 	
 	return lift_force
 

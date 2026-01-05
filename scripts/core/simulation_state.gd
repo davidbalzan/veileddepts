@@ -3,11 +3,12 @@ class_name SimulationState extends Node
 ## SimulationState maintains the authoritative game state for the submarine simulator.
 ## It serves as the single source of truth for submarine position, velocity, depth, heading,
 ## and all contact tracking. All views (tactical map, periscope, external) query this state.
+## DEPTH IS ALWAYS RELATIVE TO SEA SURFACE (0 = surface, positive = below water)
 
 ## Submarine state variables
 var submarine_position: Vector3 = Vector3.ZERO
 var submarine_velocity: Vector3 = Vector3.ZERO
-var submarine_depth: float = 0.0  # meters below surface
+var submarine_depth: float = 0.0  # meters below sea surface (0 = surface, + = deeper)
 var submarine_heading: float = 0.0  # degrees (0-360, where 0 is north) - CURRENT heading
 var submarine_speed: float = 0.0  # meters per second
 
@@ -20,7 +21,7 @@ var target_heading: float = 0.0  # Target heading for propulsion
 ## Submarine operational limits
 const MAX_SPEED: float = 10.3  # 20 knots in m/s
 const MAX_DEPTH: float = 400.0  # meters below sea level
-const MIN_DEPTH: float = -50.0  # meters below sea level (negative = above water)
+const MIN_DEPTH: float = 0.0  # meters below sea level (0 = surface, positive = deeper)
 
 ## Contact tracking
 var contacts: Array[Contact] = []
@@ -52,6 +53,12 @@ func update_submarine_command(waypoint: Vector3, speed: float, depth: float) -> 
 
 	# Clamp depth to operational limits
 	target_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
+	
+	# Log to black box
+	var main = get_tree().root.get_node_or_null("Main")
+	if main and main.has_node("BlackBoxLogger"):
+		var bb = main.get_node("BlackBoxLogger")
+		bb.log_command("DEPTH", {"target": target_depth, "speed": target_speed})
 	
 	# Log submarine command to console
 	if LogRouter:
@@ -224,6 +231,8 @@ func update_submarine_state(
 	
 	submarine_position = position
 	submarine_velocity = velocity
+	# CRITICAL: Depth is calculated by physics system relative to actual ocean surface
+	# Don't recalculate here - trust the physics system's depth value
 	submarine_depth = clamp(depth, MIN_DEPTH, MAX_DEPTH)
 	submarine_heading = heading
 	submarine_speed = clamp(speed, 0.0, MAX_SPEED)

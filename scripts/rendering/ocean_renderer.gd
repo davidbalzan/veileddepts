@@ -80,6 +80,7 @@ func _setup_ocean() -> void:
 	quad_tree.quad_size = quad_size
 	quad_tree.mesh_vertex_resolution = mesh_vertex_resolution
 	quad_tree.material = ocean.material
+	quad_tree.morph_range = 0.4  # Increased from default 0.15 for smoother LOD transitions
 
 	var ranges: Array[float] = []
 	var current_range = quad_size / 8.0
@@ -94,6 +95,9 @@ func _setup_ocean() -> void:
 	if SeaLevelManager:
 		var current_sea_level = SeaLevelManager.get_sea_level_meters()
 		quad_tree.global_position.y = current_sea_level + sea_level_offset
+		print("OceanRenderer: Ocean surface positioned at Y=%.2fm (SeaLevel=%.2f + Offset=%.2f)" % [
+			quad_tree.global_position.y, current_sea_level, sea_level_offset
+		])
 	
 	initialized = true
 	print("OceanRenderer: Initialized")
@@ -141,6 +145,12 @@ func get_wave_height_3d(world_pos: Vector3) -> float:
 	var current_sea_level = 0.0
 	if SeaLevelManager:
 		current_sea_level = SeaLevelManager.get_sea_level_meters()
+	
+	# Debug: Verify calculation every 5 seconds
+	if Engine.get_process_frames() % 300 == 0:
+		print("[OCEAN SURFACE] sea_level=%.2f, displacement=%.2f, final_height=%.2f" % [
+			current_sea_level, displacement, current_sea_level + displacement
+		])
 	
 	return current_sea_level + displacement
 

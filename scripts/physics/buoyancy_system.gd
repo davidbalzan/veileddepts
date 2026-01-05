@@ -18,9 +18,9 @@ var wave_spring_coefficient: float = 80000.0  # Spring force to follow waves (N/
 var wave_damping_coefficient: float = 25000.0  # Damping for wave following (N·s/m) - increased to prevent bouncing
 var wave_torque_coefficient: float = 500000.0  # Wave-induced roll/pitch torque (N·m)
 var deep_stabilization_coefficient: float = 5000.0  # Vertical stabilization when deep (N·s/m)
-var hull_height: float = 10.0  # Submarine hull height for submersion calculation (m)
+var hull_height: float = 8.0  # Submarine hull height for submersion calculation (m) - reduced for Seawolf size
 var surface_threshold: float = 2.0  # Depth below which submarine is considered at surface (m)
-var surface_riding_boost: float = 1.3  # Extra buoyancy when riding at surface (1.3 = 30% extra)
+var surface_riding_boost: float = 1.0  # Extra buoyancy when riding at surface (disabled for proper floating)
 
 
 func _init(config: Dictionary = {}):
@@ -205,16 +205,17 @@ func _calculate_wave_interaction(
 	# Simplified model: waves create small random torques at surface
 	# In a more advanced model, we would sample wave gradient to determine torque direction
 	# For now, use a simple damping-based approach to create realistic surface motion
+	# NOTE: Only apply roll torque at surface - submarines should not roll when submerged
 
 	# Wave-induced pitch torque (around X-axis)
 	# Proportional to forward velocity and wave influence
 	var pitch_torque: float = velocity.z * wave_torque_coefficient * wave_influence * 0.01
 	result.torque.x = pitch_torque
 
-	# Wave-induced roll torque (around Z-axis)
-	# Proportional to sideways velocity and wave influence
-	var roll_torque: float = velocity.x * wave_torque_coefficient * wave_influence * 0.01
-	result.torque.z = roll_torque
+	# Wave-induced roll torque (around Z-axis) - COMPLETELY DISABLED
+	# Roll axis is locked in physics, so roll torque should never be applied
+	# Submarines remain level during normal operation
+	result.torque.z = 0.0  # Always zero - roll is locked
 
 	return result
 

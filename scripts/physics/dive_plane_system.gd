@@ -14,8 +14,10 @@ var stern_plane_effectiveness: float = 0.6  # Stern plane contribution (60%)
 var max_plane_angle: float = 15.0  # Maximum plane deflection (degrees)
 var min_effective_speed: float = 1.0  # Minimum speed for plane effectiveness (m/s)
 var max_effective_speed: float = 5.0  # Speed for full plane effectiveness (m/s)
-var torque_coefficient: float = 1000000.0  # Base torque multiplier (N·m)
-var depth_to_pitch_ratio: float = 150.0  # Depth error to pitch angle conversion
+var torque_coefficient: float = 1500.0  # Base torque multiplier - balanced for 8M kg submarine
+var depth_to_pitch_ratio: float = 75.0  # Depth error to pitch angle (was 150, now more aggressive)
+var derivative_damping: float = 2.0  # Damping coefficient for pitch rate (increased from 0.8)
+var max_torque_limit: float = 10000000.0  # Hard limit: 10M Nm maximum torque (prevents saturation)
 
 
 func _init(config: Dictionary = {}):
@@ -43,6 +45,7 @@ func _init(config: Dictionary = {}):
 ##   vertical_velocity: Current vertical velocity (positive = descending, m/s)
 ##   forward_speed: Forward velocity component (m/s)
 ##   current_pitch: Current pitch angle (degrees, positive = nose up)
+##   pitch_angular_velocity: Current pitch rotation rate (rad/s, positive = pitching up)
 ##
 ## Returns:
 ##   Torque value to apply around X-axis (N·m, positive = nose up)
@@ -51,7 +54,8 @@ func calculate_dive_plane_torque(
 	target_depth: float,
 	vertical_velocity: float,
 	forward_speed: float,
-	current_pitch: float
+	current_pitch: float,
+	pitch_angular_velocity: float = 0.0
 ) -> float:
 	# Requirement 8.5: Calculate depth error
 	var depth_error: float = target_depth - current_depth
@@ -61,15 +65,39 @@ func calculate_dive_plane_torque(
 	# Negative depth error (need to go shallower) = positive pitch (nose up)
 	var desired_pitch: float = -depth_error / depth_to_pitch_ratio
 
-	# Requirement 8.8: Clamp plane angles to ±15°
-	desired_pitch = clamp(desired_pitch, -max_plane_angle, max_plane_angle)
-
-	# Requirement 8.6: When depth error is less than 1 meter, level the submarine pitch to zero
-	if abs(depth_error) < 1.0:
+	# CRITICAL: Only force level when breaching (< 0.1m), not at all shallow depths
+	if current_depth < 0.1:  # Breaching surface
 		desired_pitch = 0.0
+	elif abs(depth_error) < 1.0:
+		desired_pitch = 0.0
+	elif abs(depth_error) < 5.0:
+		# Gradual leveling zone - reduce pitch angle proportionally
+		var level_factor = abs(depth_error) / 5.0  # 0.2 to 1.0
+		desired_pitch *= level_factor
+	else:
+		# Requirement 8.8: Clamp plane angles to ±15°
+		desired_pitch = clamp(desired_pitch, -max_plane_angle, max_plane_angle)
 
 	# Calculate pitch error
 	var pitch_error: float = desired_pitch - current_pitch
+	
+	# Apply derivative damping based on vertical velocity to prevent oscillation
+	# If we're moving in the direction we want, reduce the correction
+	# vertical_velocity > 0 means descending, < 0 means ascending
+	var pitch_rate_damping: float = 0.0
+	if depth_error > 0.0 and vertical_velocity > 0.0:
+		# We want to descend and we are descending - reduce correction
+		pitch_rate_damping = -abs(vertical_velocity) * derivative_damping
+	elif depth_error < 0.0 and vertical_velocity < 0.0:
+		# We want to ascend and we are ascending - reduce correction
+		pitch_rate_damping = abs(vertical_velocity) * derivative_damping
+	
+	# Add angular velocity damping - oppose current pitch rotation
+	# This is the most important damping to prevent oscillation
+	var angular_damping: float = -rad_to_deg(pitch_angular_velocity) * 3.0
+	
+	# Apply damping to pitch error
+	pitch_error += pitch_rate_damping + angular_damping
 
 	# Calculate plane angle from pitch error
 	# Use proportional control to determine plane deflection
@@ -91,8 +119,12 @@ func calculate_dive_plane_torque(
 	var bow_torque: float = base_torque * bow_plane_effectiveness
 	var stern_torque: float = base_torque * stern_plane_effectiveness
 
-	# Return total pitch torque
-	return bow_torque + stern_torque
+	# SAFETY: Clamp total torque to prevent runaway oscillation
+	var total_torque: float = bow_torque + stern_torque
+	total_torque = clamp(total_torque, -max_torque_limit, max_torque_limit)
+
+	# Return clamped torque
+	return total_torque
 
 
 ## Calculate speed effectiveness factor for dive planes
